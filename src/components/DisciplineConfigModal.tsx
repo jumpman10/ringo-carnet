@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { DisciplineItem } from '../types';
 import { saveDiscipline, deleteDiscipline } from '../lib/storage';
-import { X, Settings, Plus, Edit2, Trash2, Check, AlertCircle, RefreshCw, DollarSign } from 'lucide-react';
+import { Pagination } from './Pagination';
+import { X, Settings, Plus, Edit2, Trash2, Check, AlertCircle, RefreshCw, DollarSign, FileSpreadsheet } from 'lucide-react';
+import { exportDisciplinesToExcel } from '../lib/excelExport';
 
 interface DisciplineConfigModalProps {
   isOpen: boolean;
@@ -23,6 +25,20 @@ export const DisciplineConfigModal: React.FC<DisciplineConfigModalProps> = ({
   const [editPrecio, setEditPrecio] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(disciplines.length / PAGE_SIZE));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [disciplines.length, currentPage]);
+
+  const paginatedDisciplines = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return disciplines.slice(start, start + PAGE_SIZE);
+  }, [disciplines, currentPage]);
 
   if (!isOpen) return null;
 
@@ -217,12 +233,24 @@ export const DisciplineConfigModal: React.FC<DisciplineConfigModalProps> = ({
 
           {/* Disciplines List */}
           <div className="space-y-2">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase font-mono block">
-              Disciplinas Activas ({disciplines.length})
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-neutral-400 uppercase font-mono block">
+                Disciplinas Activas ({disciplines.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => exportDisciplinesToExcel(disciplines)}
+                disabled={disciplines.length === 0}
+                className="px-2 py-0.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-neutral-300 hover:text-white text-[11px] rounded border border-neutral-800 flex items-center gap-1 font-mono transition-colors shadow-sm"
+                title="Descargar disciplinas en Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
+                <span>Exportar Excel</span>
+              </button>
+            </div>
 
             <div className="divide-y divide-neutral-900 border border-neutral-800 rounded-xl overflow-hidden bg-black">
-              {disciplines.map((d) => {
+              {paginatedDisciplines.map((d) => {
                 const isEditing = editingId === d.id;
 
                 if (isEditing) {
@@ -310,6 +338,17 @@ export const DisciplineConfigModal: React.FC<DisciplineConfigModalProps> = ({
                 );
               })}
             </div>
+
+            {disciplines.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={disciplines.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setCurrentPage}
+                itemLabel="disciplinas"
+                className="pt-1"
+              />
+            )}
           </div>
         </div>
 

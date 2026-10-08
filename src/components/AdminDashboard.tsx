@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Member, AccessLog, PaymentLog, RenewMemberOptions } from '../types';
 import { getCalculatedStatus, getDaysRemaining, formatDisplayDate, buildWhatsAppLink } from '../lib/dateUtils';
 import { RenewMemberModal } from './RenewMemberModal';
 import { MemberAvatar } from './MemberAvatar';
+import { Pagination } from './Pagination';
 import {
   Users,
   UserPlus,
@@ -20,8 +21,14 @@ import {
   Dumbbell,
   History,
   RefreshCw,
-  ArrowUpRight
+  ArrowUpRight,
+  FileSpreadsheet
 } from 'lucide-react';
+import {
+  exportMembersToExcel,
+  exportAccessLogsToExcel,
+  exportPaymentLogsToExcel
+} from '../lib/excelExport';
 
 interface AdminDashboardProps {
   members: Member[];
@@ -97,6 +104,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return true;
   });
 
+  // Pagination configuration (15 items max per page)
+  const PAGE_SIZE = 15;
+  const [membersPage, setMembersPage] = useState(1);
+  const [accessLogsPage, setAccessLogsPage] = useState(1);
+  const [paymentLogsPage, setPaymentLogsPage] = useState(1);
+
+  // Reset page when member filters change
+  useEffect(() => {
+    setMembersPage(1);
+  }, [searchQuery, statusFilter, disciplineFilter]);
+
+  // Keep page within valid bounds if records change
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredMembers.length / PAGE_SIZE));
+    if (membersPage > maxPage) {
+      setMembersPage(maxPage);
+    }
+  }, [filteredMembers.length, membersPage]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(accessLogs.length / PAGE_SIZE));
+    if (accessLogsPage > maxPage) {
+      setAccessLogsPage(maxPage);
+    }
+  }, [accessLogs.length, accessLogsPage]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(paymentLogs.length / PAGE_SIZE));
+    if (paymentLogsPage > maxPage) {
+      setPaymentLogsPage(maxPage);
+    }
+  }, [paymentLogs.length, paymentLogsPage]);
+
+  const paginatedMembers = useMemo(() => {
+    const start = (membersPage - 1) * PAGE_SIZE;
+    return filteredMembers.slice(start, start + PAGE_SIZE);
+  }, [filteredMembers, membersPage]);
+
+  const paginatedAccessLogs = useMemo(() => {
+    const start = (accessLogsPage - 1) * PAGE_SIZE;
+    return accessLogs.slice(start, start + PAGE_SIZE);
+  }, [accessLogs, accessLogsPage]);
+
+  const paginatedPaymentLogs = useMemo(() => {
+    const start = (paymentLogsPage - 1) * PAGE_SIZE;
+    return paymentLogs.slice(start, start + PAGE_SIZE);
+  }, [paymentLogs, paymentLogsPage]);
+
   const handleRenewClick = (member: Member) => {
     setRenewingMember(member);
   };
@@ -136,8 +191,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Expiring in 2 days */}
         <div
-          onClick={onOpenExpiringModal}
-          className="bg-[#0a0a0a] hover:bg-[#141414] border border-neutral-700 active:scale-[0.98] rounded-xl p-3.5 sm:p-4 cursor-pointer transition-all"
+          className="bg-[#0a0a0a] hover:bg-[#141414] border border-neutral-700 active:scale-[0.98] rounded-xl p-3.5 sm:p-4 transition-all"
         >
           <div className="flex items-center justify-between text-white">
             <span className="text-[10px] sm:text-xs uppercase font-mono tracking-wider font-bold">
@@ -174,33 +228,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="flex items-center bg-black p-1 rounded-lg border border-neutral-800 overflow-x-auto text-xs">
           <button
             onClick={() => setActiveTab('members')}
-            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'members'
-                ? 'bg-white text-black'
-                : 'text-neutral-400 hover:text-white'
-            }`}
+            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${activeTab === 'members'
+              ? 'bg-white text-black'
+              : 'text-neutral-400 hover:text-white'
+              }`}
           >
             <Users className="w-3.5 h-3.5" />
             Socios ({totalMembers})
           </button>
           <button
             onClick={() => setActiveTab('access_logs')}
-            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'access_logs'
-                ? 'bg-white text-black'
-                : 'text-neutral-400 hover:text-white'
-            }`}
+            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${activeTab === 'access_logs'
+              ? 'bg-white text-black'
+              : 'text-neutral-400 hover:text-white'
+              }`}
           >
             <History className="w-3.5 h-3.5" />
             Portería ({accessLogs.length})
           </button>
           <button
             onClick={() => setActiveTab('payment_logs')}
-            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'payment_logs'
-                ? 'bg-white text-black'
-                : 'text-neutral-400 hover:text-white'
-            }`}
+            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${activeTab === 'payment_logs'
+              ? 'bg-white text-black'
+              : 'text-neutral-400 hover:text-white'
+              }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
             Pagos ({paymentLogs.length})
@@ -209,14 +260,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Primary Action Buttons - Mobile friendly */}
         <div className="grid grid-cols-2 sm:flex items-center gap-2">
-          <button
-            onClick={onOpenExpiringModal}
-            className="py-2 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white border border-neutral-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>WhatsApp (≤ 2d)</span>
-          </button>
-
           <button
             onClick={onOpenNewMember}
             className="py-2 px-3 bg-white hover:bg-neutral-200 active:scale-95 text-black font-black text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5"
@@ -249,62 +292,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 w-full sm:w-auto text-xs">
                 <button
                   onClick={() => setStatusFilter('all')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${
-                    statusFilter === 'all'
-                      ? 'bg-white text-black'
-                      : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
-                  }`}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${statusFilter === 'all'
+                    ? 'bg-white text-black'
+                    : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
+                    }`}
                 >
                   Todos ({members.length})
                 </button>
                 <button
                   onClick={() => setStatusFilter('activo')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${
-                    statusFilter === 'activo'
-                      ? 'bg-white text-black'
-                      : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
-                  }`}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${statusFilter === 'activo'
+                    ? 'bg-white text-black'
+                    : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
+                    }`}
                 >
                   Al Día ({activeMembers})
                 </button>
                 <button
                   onClick={() => setStatusFilter('por_vencer')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${
-                    statusFilter === 'por_vencer'
-                      ? 'bg-white text-black'
-                      : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
-                  }`}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${statusFilter === 'por_vencer'
+                    ? 'bg-white text-black'
+                    : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
+                    }`}
                 >
                   Por Vencer ({expiringTwoDaysMembers})
                 </button>
                 <button
                   onClick={() => setStatusFilter('vencido')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${
-                    statusFilter === 'vencido'
-                      ? 'bg-white text-black'
-                      : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
-                  }`}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors ${statusFilter === 'vencido'
+                    ? 'bg-white text-black'
+                    : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
+                    }`}
                 >
                   Vencidos ({expiredOrUnpaidMembers})
                 </button>
               </div>
 
-              {/* Discipline Dropdown */}
-              <select
-                value={disciplineFilter}
-                onChange={(e) => setDisciplineFilter(e.target.value)}
-                className="w-full sm:w-auto bg-black border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-neutral-300 focus:outline-none focus:border-white cursor-pointer font-mono"
-              >
-                <option value="all">Todas las disciplinas</option>
-                {(disciplines.length > 0
-                  ? disciplines.map((d) => d.nombre)
-                  : ['Musculación', 'Crossfit', 'Funcional', 'Boxeo', 'Spinning', 'Pilates', 'Calistenia', 'Pase Libre']
-                ).map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Discipline Dropdown */}
+                <select
+                  value={disciplineFilter}
+                  onChange={(e) => setDisciplineFilter(e.target.value)}
+                  className="flex-1 sm:flex-none bg-black border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-neutral-300 focus:outline-none focus:border-white cursor-pointer font-mono"
+                >
+                  <option value="all">Todas las disciplinas</option>
+                  {(disciplines.length > 0
+                    ? disciplines.map((d) => d.nombre)
+                    : ['Musculación', 'Crossfit', 'Funcional', 'Boxeo', 'Spinning', 'Pilates', 'Calistenia', 'Pase Libre']
+                  ).map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => exportMembersToExcel(filteredMembers)}
+                  disabled={filteredMembers.length === 0}
+                  className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-neutral-200 hover:text-white text-xs font-mono font-bold rounded-lg border border-neutral-700 flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shadow-sm"
+                  title="Descargar socios en Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Excel</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -317,7 +369,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-[11px] text-neutral-500 mt-0.5">Prueba cambiando los filtros</p>
               </div>
             ) : (
-              filteredMembers.map((member) => {
+              paginatedMembers.map((member) => {
                 const status = getCalculatedStatus(member.fecha_vencimiento, member.estado_pago);
                 const daysRemaining = status.daysRemaining;
 
@@ -353,8 +405,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {daysRemaining < 0
                           ? `Vencido`
                           : daysRemaining === 0
-                          ? 'Vence hoy'
-                          : `${daysRemaining}d`}
+                            ? 'Vence hoy'
+                            : `${daysRemaining}d`}
                       </span>
                     </div>
 
@@ -369,11 +421,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         Vence: {formatDisplayDate(member.fecha_vencimiento)}
                       </span>
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          member.estado_pago === 'pagado'
-                            ? 'bg-neutral-900 text-white border border-neutral-700'
-                            : 'bg-black text-neutral-500 border border-neutral-900 line-through'
-                        }`}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${member.estado_pago === 'pagado'
+                          ? 'bg-neutral-900 text-white border border-neutral-700'
+                          : 'bg-black text-neutral-500 border border-neutral-900 line-through'
+                          }`}
                       >
                         {member.estado_pago === 'pagado' ? 'Pagado' : 'Impago'}
                       </span>
@@ -433,6 +484,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 );
               })
             )}
+            <div className="block lg:hidden">
+              <Pagination
+                currentPage={membersPage}
+                totalItems={filteredMembers.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setMembersPage}
+                itemLabel="socios"
+                className="pt-2 px-1"
+              />
+            </div>
           </div>
 
           {/* DESKTOP VIEW: TABLE (Visible on lg and up) */}
@@ -460,7 +521,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filteredMembers.map((member) => {
+                    paginatedMembers.map((member) => {
                       const status = getCalculatedStatus(member.fecha_vencimiento, member.estado_pago);
                       const daysRemaining = status.daysRemaining;
 
@@ -506,18 +567,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {daysRemaining < 0
                                 ? `${Math.abs(daysRemaining)}d vencido`
                                 : daysRemaining === 0
-                                ? 'Vence hoy'
-                                : `${daysRemaining} días`}
+                                  ? 'Vence hoy'
+                                  : `${daysRemaining} días`}
                             </span>
                           </td>
 
                           <td className="py-3 px-3">
                             <span
-                              className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
-                                member.estado_pago === 'pagado'
-                                  ? 'bg-neutral-900 text-white border border-neutral-700'
-                                  : 'bg-black text-neutral-500 border border-neutral-800 line-through'
-                              }`}
+                              className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${member.estado_pago === 'pagado'
+                                ? 'bg-neutral-900 text-white border border-neutral-700'
+                                : 'bg-black text-neutral-500 border border-neutral-800 line-through'
+                                }`}
                             >
                               {member.estado_pago === 'pagado' ? 'Pagado' : 'Pendiente'}
                             </span>
@@ -581,6 +641,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </tbody>
               </table>
             </div>
+            <div className="p-3 border-t border-neutral-800 bg-[#0d0d0d]">
+              <Pagination
+                currentPage={membersPage}
+                totalItems={filteredMembers.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setMembersPage}
+                itemLabel="socios"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -598,12 +667,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Historial de validaciones generadas por escáner
               </p>
             </div>
-            <button
-              onClick={onOpenScanner}
-              className="px-3 py-1.5 bg-white text-black text-xs font-bold rounded-lg"
-            >
-              Escanear
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => exportAccessLogsToExcel(accessLogs)}
+                disabled={accessLogs.length === 0}
+                className="px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-neutral-200 hover:text-white text-xs font-mono font-bold rounded-lg border border-neutral-700 flex items-center gap-1.5 transition-colors shadow-sm"
+                title="Descargar accesos en Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Exportar Excel</span>
+              </button>
+              <button
+                onClick={onOpenScanner}
+                className="px-3 py-1.5 bg-white text-black text-xs font-bold rounded-lg"
+              >
+                Escanear
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -626,7 +707,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  accessLogs.map((log) => (
+                  paginatedAccessLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-[#121212]">
                       <td className="py-2.5 px-3 text-neutral-400 text-[11px]">
                         {new Date(log.timestamp).toLocaleString('es-ES', {
@@ -645,11 +726,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
                       <td className="py-2.5 px-3">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                            log.autorizado
-                              ? 'bg-white text-black'
-                              : 'bg-black text-neutral-400 border border-neutral-800'
-                          }`}
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${log.autorizado
+                            ? 'bg-white text-black'
+                            : 'bg-black text-neutral-400 border border-neutral-800'
+                            }`}
                         >
                           {log.autorizado ? 'AUTORIZADO' : 'DENEGADO'}
                         </span>
@@ -661,6 +741,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={accessLogsPage}
+            totalItems={accessLogs.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setAccessLogsPage}
+            itemLabel="ingresos"
+            className="pt-2"
+          />
         </div>
       )}
 
@@ -677,8 +765,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Registro de pagos de cuotas mensuales
               </p>
             </div>
-            <div className="text-xs text-white font-bold bg-neutral-900 border border-neutral-700 px-3 py-1.5 rounded-lg font-mono">
-              Recaudación Estimada: ${estimatedMonthlyRevenue.toLocaleString('es-AR')}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => exportPaymentLogsToExcel(paymentLogs, members)}
+                disabled={paymentLogs.length === 0}
+                className="px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-neutral-200 hover:text-white text-xs font-mono font-bold rounded-lg border border-neutral-700 flex items-center gap-1.5 transition-colors shadow-sm"
+                title="Descargar cobros en Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Exportar Excel</span>
+              </button>
+              <div className="text-xs text-white font-bold bg-neutral-900 border border-neutral-700 px-3 py-1.5 rounded-lg font-mono">
+                Recaudación Estimada: ${estimatedMonthlyRevenue.toLocaleString('es-AR')}
+              </div>
             </div>
           </div>
 
@@ -701,7 +801,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  paymentLogs.map((pay) => {
+                  paginatedPaymentLogs.map((pay) => {
                     const member = members.find((m) => m.id === pay.member_id);
                     return (
                       <tr key={pay.id} className="hover:bg-[#121212]">
@@ -729,6 +829,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={paymentLogsPage}
+            totalItems={paymentLogs.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPaymentLogsPage}
+            itemLabel="pagos"
+            className="pt-2"
+          />
         </div>
       )}
 
