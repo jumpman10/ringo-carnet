@@ -1,0 +1,510 @@
+import React, { useState, useEffect } from 'react';
+import { Member, DisciplineItem, PaymentStatus, PaymentMethod, MembershipStatus } from '../types';
+import { calculateNextExpiration, formatDateISO } from '../lib/dateUtils';
+import { processCarnetPhoto } from '../lib/imageUtils';
+import { CameraCaptureModal } from './CameraCaptureModal';
+import {
+  X,
+  User,
+  Phone,
+  Calendar,
+  CreditCard,
+  Dumbbell,
+  Key,
+  Camera,
+  Upload,
+  Trash2,
+  Check,
+  Lock,
+} from 'lucide-react';
+
+interface MemberModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (data: any) => Promise<void>;
+  member?: Member | null;
+  disciplines: DisciplineItem[];
+}
+
+const PAYMENT_METHODS: PaymentMethod[] = ['Efectivo', 'Transferencia', 'Tarjeta de crédito'];
+
+export const MemberModal: React.FC<MemberModalProps> = ({
+  isOpen,
+  onClose,
+  onSave,
+  member,
+  disciplines,
+}) => {
+  const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
+  const [dni, setDni] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [disciplina, setDisciplina] = useState('');
+  const [fechaIngreso, setFechaIngreso] = useState(formatDateISO(new Date()));
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
+  const [montoMensual, setMontoMensual] = useState<number>(28000);
+  const [estadoPago, setEstadoPago] = useState<PaymentStatus>('pagado');
+  const [metodoPago, setMetodoPago] = useState<PaymentMethod>('Efectivo');
+  const [fotoUrl, setFotoUrl] = useState('');
+  const [notas, setNotas] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+
+  useEffect(() => {
+    if (member) {
+      setNombre(member.nombre);
+      setApellido(member.apellido);
+      setDni(member.dni);
+      setTelefono(member.telefono);
+      setDisciplina(member.disciplina);
+      setFechaIngreso(member.fecha_ingreso);
+      setFechaVencimiento(member.fecha_vencimiento);
+      setMontoMensual(member.monto_mensual || 28000);
+      setEstadoPago(member.estado_pago);
+      setMetodoPago(member.metodo_pago || 'Efectivo');
+      setFotoUrl(member.foto_url || '');
+      setNotas(member.notas || '');
+    } else {
+      const today = formatDateISO(new Date());
+      const defaultDisc = disciplines[0] || { nombre: 'Musculación', precio: 28000 };
+      setNombre('');
+      setApellido('');
+      setDni('');
+      setTelefono('+54 9 11 ');
+      setDisciplina(defaultDisc.nombre);
+      setFechaIngreso(today);
+      setFechaVencimiento(calculateNextExpiration(today));
+      setMontoMensual(defaultDisc.precio);
+      setEstadoPago('pagado');
+      setMetodoPago('Efectivo');
+      setFotoUrl('');
+      setNotas('');
+    }
+  }, [member, isOpen, disciplines]);
+
+  const handleIngresoChange = (val: string) => {
+    setFechaIngreso(val);
+    setFechaVencimiento(calculateNextExpiration(val));
+  };
+
+  const handleDisciplineChange = (selectedName: string) => {
+    setDisciplina(selectedName);
+    const found = disciplines.find((d) => d.nombre === selectedName);
+    if (found) {
+      setMontoMensual(found.precio);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingPhoto(true);
+    try {
+      const compressed = await processCarnetPhoto(file, { size: 400, quality: 0.82 });
+      setFotoUrl(compressed);
+    } catch (err: any) {
+      console.error('Error al procesar foto carnet:', err);
+      alert('Error al procesar la imagen: ' + (err.message || 'formato incompatible'));
+    } finally {
+      setIsProcessingPhoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleCameraCapture = (capturedDataUrl: string) => {
+    setFotoUrl(capturedDataUrl);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nombre.trim() || !apellido.trim() || !dni.trim()) {
+      alert('Por favor completa Nombre, Apellido y DNI');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const calculatedVencimiento = fechaVencimiento || calculateNextExpiration(fechaIngreso);
+      const estadoMembresia: MembershipStatus = estadoPago === 'pendiente' ? 'vencido' : 'activo';
+
+      await onSave({
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        dni: dni.trim(),
+        telefono: telefono.trim(),
+        disciplina: disciplina || disciplines[0]?.nombre || 'Musculación',
+        fecha_ingreso: fechaIngreso,
+        fecha_vencimiento: calculatedVencimiento,
+        estado_membresia: estadoMembresia,
+        estado_pago: estadoPago,
+        metodo_pago: metodoPago,
+        monto_mensual: Number(montoMensual),
+        foto_url: fotoUrl.trim(),
+        notas: notas.trim(),
+      });
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      alert('Error al guardar socio: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl my-4 sm:my-8 overflow-hidden shadow-2xl relative">
+          {/* Header */}
+          <div className="p-4 sm:p-5 border-b border-neutral-900 flex items-center justify-between">
+            <div>
+              <h3 className="text-base sm:text-lg font-black text-white uppercase font-mono tracking-wide">
+                {member ? 'Editar Socio' : 'Nuevo Socio'}
+              </h3>
+              <p className="text-[11px] text-neutral-400 font-mono mt-0.5">
+                {member
+                  ? 'Modifica los datos del socio registrado'
+                  : 'Registra un nuevo miembro del gimnasio'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
+            {/* Nombre y Apellido */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <User className="w-3 h-3 text-neutral-400" />
+                  Nombre <span className="text-white">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Ej: Marcos"
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <User className="w-3 h-3 text-neutral-400" />
+                  Apellido <span className="text-white">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={apellido}
+                  onChange={(e) => setApellido(e.target.value)}
+                  placeholder="Ej: Maidana"
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+            </div>
+
+            {/* DNI y Teléfono */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <Key className="w-3 h-3 text-neutral-400" />
+                  DNI (Clave de acceso) <span className="text-white">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={dni}
+                  onChange={(e) => setDni(e.target.value)}
+                  placeholder="40123456"
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <Phone className="w-3 h-3 text-neutral-400" />
+                  WhatsApp / Teléfono
+                </label>
+                <input
+                  type="text"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value)}
+                  placeholder="+54 9 11 1234 5678"
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Disciplina y Cuota Mensual */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <Dumbbell className="w-3 h-3 text-neutral-400" />
+                  Disciplina
+                </label>
+                <select
+                  value={disciplina}
+                  onChange={(e) => handleDisciplineChange(e.target.value)}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-mono"
+                >
+                  {disciplines.map((d) => (
+                    <option key={d.id} value={d.nombre}>
+                      {d.nombre} (${d.precio.toLocaleString('es-AR')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <CreditCard className="w-3 h-3 text-neutral-400" />
+                  Monto Mensual ($ ARS)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="500"
+                  value={montoMensual}
+                  onChange={(e) => setMontoMensual(Number(e.target.value))}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Fechas de Ingreso y Vencimiento */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3 text-neutral-400" />
+                  Fecha de Ingreso
+                </label>
+                <input
+                  type="date"
+                  value={fechaIngreso}
+                  onChange={(e) => handleIngresoChange(e.target.value)}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3 text-neutral-400" />
+                  Vencimiento (1 Mes)
+                </label>
+                <input
+                  type="date"
+                  value={fechaVencimiento}
+                  onChange={(e) => setFechaVencimiento(e.target.value)}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Estado de Pago y Método */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-950 p-3 rounded-xl border border-neutral-900">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
+                  Estado de Pago Inicial
+                </label>
+                <div className="flex items-center gap-2">
+                  <label
+                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                      estadoPago === 'pagado'
+                        ? 'bg-white text-black font-black border-white'
+                        : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="estadoPago"
+                      checked={estadoPago === 'pagado'}
+                      onChange={() => setEstadoPago('pagado')}
+                      className="hidden"
+                    />
+                    <Check className="w-3 h-3" />
+                    <span className="text-[11px] font-mono uppercase">Pagado</span>
+                  </label>
+
+                  <label
+                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                      estadoPago === 'pendiente'
+                        ? 'bg-neutral-800 text-white font-bold border-neutral-600'
+                        : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="estadoPago"
+                      checked={estadoPago === 'pendiente'}
+                      onChange={() => setEstadoPago('pendiente')}
+                      className="hidden"
+                    />
+                    <span className="text-[11px] font-mono uppercase">Pendiente</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
+                  Método de Pago
+                </label>
+                <select
+                  value={metodoPago}
+                  onChange={(e) => setMetodoPago(e.target.value as PaymentMethod)}
+                  disabled={estadoPago === 'pendiente'}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono disabled:opacity-40"
+                >
+                  {PAYMENT_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Foto de Perfil Carnet 1:1 */}
+            <div className="bg-[#0e0e0e] border border-neutral-800/80 rounded-xl p-3 sm:p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-neutral-300 uppercase font-mono flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-neutral-400" />
+                  Foto Carnet (1:1)
+                </label>
+                <span className="text-[10px] text-neutral-500 font-mono">
+                  {fotoUrl ? 'Lista para carnet' : 'Opcional (se puede subir después)'}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                {/* Preview 1:1 Box */}
+                <div className="relative w-20 h-20 rounded-xl border border-neutral-700 bg-neutral-950 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">
+                  {fotoUrl ? (
+                    <>
+                      <img
+                        src={fotoUrl}
+                        alt="Foto carnet socio"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute bottom-0 inset-x-0 bg-black/70 backdrop-blur-[2px] text-center py-0.5 text-[8px] font-mono text-white/90">
+                        1:1 Carnet
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-neutral-500 p-1 text-center">
+                      <User className="w-6 h-6 stroke-[1.5] text-neutral-600 mb-0.5" />
+                      <span className="text-[8px] font-mono uppercase tracking-tight text-neutral-500 leading-none">
+                        Sin foto
+                      </span>
+                    </div>
+                  )}
+
+                  {isProcessingPhoto && (
+                    <div className="absolute inset-0 bg-black/80 flex items-center justify-center text-white text-[10px] font-mono">
+                      Procesando...
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Botón tomar foto con cámara */}
+                    <button
+                      type="button"
+                      onClick={() => setIsCameraOpen(true)}
+                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-neutral-200 active:scale-95 text-black font-black uppercase text-[11px] tracking-wide font-mono flex items-center gap-1.5 transition-all shadow-sm"
+                    >
+                      <Camera className="w-3.5 h-3.5 stroke-[2.5]" />
+                      Sacar foto con cámara
+                    </button>
+
+                    {/* Botón subir archivo */}
+                    <label className="cursor-pointer bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white text-[11px] px-3 py-1.5 rounded-lg border border-neutral-800 inline-flex items-center gap-1.5 font-mono transition-colors">
+                      <Upload className="w-3.5 h-3.5 text-neutral-400" />
+                      Subir archivo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        disabled={isProcessingPhoto}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* Botón quitar foto */}
+                    {fotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setFotoUrl('')}
+                        title="Quitar foto"
+                        className="px-2.5 py-1.5 rounded-lg bg-neutral-900 hover:bg-red-950/40 text-neutral-400 hover:text-red-400 border border-neutral-800 hover:border-red-900/50 text-[11px] font-mono flex items-center gap-1 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Quitar
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-[10px] text-neutral-500 font-mono leading-relaxed">
+                    Formato cuadrado 1:1 tipo carnet optimizado (&lt;40KB). Si no tomas ni subes ninguna foto, se guardará vacía para que puedas subirla después.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Notas */}
+            <div>
+              <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1">
+                Notas u Observaciones
+              </label>
+              <textarea
+                rows={2}
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                placeholder="Objetivos, apto médico, lesiones previas..."
+                className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+              />
+            </div>
+
+            {/* Botones de acción */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-neutral-900">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-900 text-xs font-mono transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-5 py-2 rounded-lg bg-white hover:bg-neutral-200 active:scale-95 text-black font-black uppercase text-xs tracking-wider transition-all shadow-sm"
+              >
+                {loading ? 'Guardando...' : member ? 'Actualizar Socio' : 'Guardar Socio'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal de Cámara para Captura 1:1 */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
+    </>
+  );
+};
