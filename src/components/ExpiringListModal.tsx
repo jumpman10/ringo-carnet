@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Member } from '../types';
 import { getDaysRemaining, formatDisplayDate, buildWhatsAppLink } from '../lib/dateUtils';
 import { MemberAvatar } from './MemberAvatar';
+import { Pagination } from './Pagination';
 import {
   X,
   MessageCircle,
@@ -11,8 +12,10 @@ import {
   Check,
   Calendar,
   Phone,
-  Dumbbell
+  Dumbbell,
+  FileSpreadsheet
 } from 'lucide-react';
+import { exportCriticalMembersToExcel } from '../lib/excelExport';
 
 interface ExpiringListModalProps {
   isOpen: boolean;
@@ -24,6 +27,8 @@ export const ExpiringListModal: React.FC<ExpiringListModalProps> = ({ isOpen, on
   const [filterType, setFilterType] = useState<'all_critical' | 'two_days' | 'today_tomorrow' | 'expired'>('all_critical');
   const [sentMap, setSentMap] = useState<Record<string, boolean>>({});
   const [copiedBatch, setCopiedBatch] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
 
   if (!isOpen) return null;
 
@@ -34,6 +39,24 @@ export const ExpiringListModal: React.FC<ExpiringListModalProps> = ({ isOpen, on
     if (filterType === 'expired') return days < 0;
     return days <= 2;
   }).sort((a, b) => getDaysRemaining(a.fecha_vencimiento) - getDaysRemaining(b.fecha_vencimiento));
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType]);
+
+  // Keep page within bounds
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(criticalMembers.length / PAGE_SIZE));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [criticalMembers.length, currentPage]);
+
+  const paginatedCriticalMembers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return criticalMembers.slice(start, start + PAGE_SIZE);
+  }, [criticalMembers, currentPage]);
 
   const handleSendIndividual = (member: Member) => {
     const days = getDaysRemaining(member.fecha_vencimiento);
@@ -151,6 +174,17 @@ export const ExpiringListModal: React.FC<ExpiringListModalProps> = ({ isOpen, on
 
           <div className="flex items-center gap-1.5 ml-auto">
             <button
+              type="button"
+              onClick={() => exportCriticalMembersToExcel(criticalMembers, filterType)}
+              disabled={criticalMembers.length === 0}
+              className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-neutral-300 hover:text-white text-xs rounded-md border border-neutral-800 flex items-center gap-1 font-mono transition-colors shadow-sm"
+              title="Descargar socios por vencer en Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Excel</span>
+            </button>
+
+            <button
               onClick={handleCopySummary}
               className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs rounded-md border border-neutral-800 flex items-center gap-1 font-mono"
             >
@@ -176,7 +210,7 @@ export const ExpiringListModal: React.FC<ExpiringListModalProps> = ({ isOpen, on
               No hay socios pendientes de aviso en este filtro.
             </div>
           ) : (
-            criticalMembers.map((member) => {
+            paginatedCriticalMembers.map((member) => {
               const daysRemaining = getDaysRemaining(member.fecha_vencimiento);
               const isSent = Boolean(sentMap[member.id]);
 
@@ -245,6 +279,19 @@ export const ExpiringListModal: React.FC<ExpiringListModalProps> = ({ isOpen, on
             })
           )}
         </div>
+
+        {/* Pagination footer */}
+        {criticalMembers.length > 0 && (
+          <div className="p-3 bg-black border-t border-neutral-800 shrink-0">
+            <Pagination
+              currentPage={currentPage}
+              totalItems={criticalMembers.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setCurrentPage}
+              itemLabel="socios por vencer"
+            />
+          </div>
+        )}
       </div>
     </div>
   );
