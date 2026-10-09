@@ -132,7 +132,8 @@ CREATE TABLE IF NOT EXISTS public.miembros (
     fecha_vencimiento DATE NOT NULL,
     estado_membresia TEXT NOT NULL DEFAULT 'activo',
     estado_pago TEXT NOT NULL DEFAULT 'pagado',
-    monto_mensual NUMERIC DEFAULT 25.00,
+    monto_mensual NUMERIC DEFAULT 28000.00,
+    saldo_pendiente NUMERIC(10, 2) DEFAULT 0.00,
     ultimo_pago_fecha DATE,
     notas TEXT,
     codigo_qr TEXT UNIQUE NOT NULL,
@@ -158,6 +159,8 @@ CREATE TABLE IF NOT EXISTS public.pagos (
     fecha DATE NOT NULL,
     monto NUMERIC NOT NULL,
     metodo TEXT NOT NULL DEFAULT 'Efectivo',
+    detalles JSONB DEFAULT '[]'::jsonb,
+    notas TEXT,
     periodo_inicio DATE NOT NULL,
     periodo_fin DATE NOT NULL,
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
