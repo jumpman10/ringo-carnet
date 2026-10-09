@@ -107,8 +107,9 @@ export const ExpiringListModal: React.FC<ExpiringListModalProps> = ({ isOpen, on
   const pendingCount = criticalMembers.filter((m) => !sentMap[m.id]).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative my-4 sm:my-8 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-sm">
+      <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
         {/* Header - B&W */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black shrink-0">
           <div className="flex items-center gap-2.5">
@@ -294,5 +295,6 @@ export const ExpiringListModal: React.FC<ExpiringListModalProps> = ({ isOpen, on
         )}
       </div>
     </div>
+  </div>
   );
 };
