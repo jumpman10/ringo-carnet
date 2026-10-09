@@ -157,32 +157,34 @@ export const MemberModal: React.FC<MemberModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
-        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl my-4 sm:my-8 overflow-hidden shadow-2xl relative">
-          {/* Header */}
-          <div className="p-4 sm:p-5 border-b border-neutral-900 flex items-center justify-between">
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-white uppercase font-mono tracking-wide">
-                {member ? 'Editar Socio' : 'Nuevo Socio'}
-              </h3>
-              <p className="text-[11px] text-neutral-400 font-mono mt-0.5">
-                {member
-                  ? 'Modifica los datos del socio registrado'
-                  : 'Registra un nuevo miembro del gimnasio'}
-              </p>
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-sm">
+        <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
+          <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl my-auto overflow-hidden shadow-2xl relative flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-neutral-900 flex items-center justify-between shrink-0 bg-[#0a0a0a]">
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-white uppercase font-mono tracking-wide">
+                  {member ? 'Editar Socio' : 'Nuevo Socio'}
+                </h3>
+                <p className="text-[11px] text-neutral-400 font-mono mt-0.5">
+                  {member
+                    ? 'Modifica los datos del socio registrado'
+                    : 'Registra un nuevo miembro del gimnasio'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
-            {/* Nombre y Apellido */}
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+                {/* Nombre y Apellido */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
@@ -320,11 +322,10 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                 </label>
                 <div className="flex items-center gap-2">
                   <label
-                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
-                      estadoPago === 'pagado'
+                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${estadoPago === 'pagado'
                         ? 'bg-white text-black font-black border-white'
                         : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -338,11 +339,10 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                   </label>
 
                   <label
-                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
-                      estadoPago === 'pendiente'
+                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${estadoPago === 'pendiente'
                         ? 'bg-neutral-800 text-white font-bold border-neutral-600'
                         : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -478,24 +478,27 @@ export const MemberModal: React.FC<MemberModalProps> = ({
               />
             </div>
 
-            {/* Botones de acción */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-neutral-900">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-lg border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-900 text-xs font-mono transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-5 py-2 rounded-lg bg-white hover:bg-neutral-200 active:scale-95 text-black font-black uppercase text-xs tracking-wider transition-all shadow-sm"
-              >
-                {loading ? 'Guardando...' : member ? 'Actualizar Socio' : 'Guardar Socio'}
-              </button>
-            </div>
-          </form>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="p-3.5 sm:p-4 border-t border-neutral-900 bg-[#0a0a0a] flex items-center justify-end gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-lg border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-900 text-xs font-mono transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 py-2 rounded-lg bg-white hover:bg-neutral-200 active:scale-95 text-black font-black uppercase text-xs tracking-wider transition-all shadow-sm"
+                >
+                  {loading ? 'Guardando...' : member ? 'Actualizar Socio' : 'Guardar Socio'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
 

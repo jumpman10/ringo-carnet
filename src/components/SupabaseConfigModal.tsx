@@ -77,38 +77,39 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
   const config = getStoredSupabaseConfig();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl relative my-4 sm:my-8">
-        {/* Header - B&W */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold">
-              <Database className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-black text-sm sm:text-base text-white uppercase tracking-wider">
-                  Configurar Supabase
-                </h3>
-                <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-neutral-900 text-white border border-neutral-700">
-                  {config.isConfigured ? 'Conectado' : 'Local'}
-                </span>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-sm">
+      <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl relative my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
+          {/* Header - B&W */}
+          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold">
+                <Database className="w-4 h-4" />
               </div>
-              <p className="text-[11px] text-neutral-400 font-mono">
-                PostgreSQL & Autenticación de Socios
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Configurar Supabase
+                  </h3>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-neutral-900 text-white border border-neutral-700">
+                    {config.isConfigured ? 'Conectado' : 'Local'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 font-mono">
+                  PostgreSQL & Autenticación de Socios
+                </p>
+              </div>
             </div>
+            <button
+              onClick={onClose}
+              className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-900 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-900 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
+          {/* Body */}
+          <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 text-xs">
           <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-800 text-neutral-300 space-y-1 font-mono text-[11px]">
             <p>1. Ingresa la URL y anon public key de tu proyecto Supabase.</p>
             <p>2. Ejecuta el script SQL en el editor de Supabase para crear las tablas.</p>
@@ -204,5 +205,6 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
         </div>
       </div>
     </div>
+  </div>
   );
 };
