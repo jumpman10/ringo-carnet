@@ -1,7 +1,12 @@
 export type MembershipStatus = 'activo' | 'por_vencer' | 'vencido' | 'inactivo';
-export type PaymentStatus = 'pagado' | 'pendiente' | 'vencido';
+export type PaymentStatus = 'pagado' | 'pendiente' | 'vencido' | 'parcial';
 
-export type PaymentMethod = 'Efectivo' | 'Transferencia' | 'Tarjeta de crédito';
+export type PaymentMethod = 'Efectivo' | 'Transferencia' | 'Tarjeta de crédito' | 'Mixto';
+
+export interface PaymentMethodDetail {
+  metodo: 'Efectivo' | 'Transferencia' | 'Tarjeta de crédito';
+  monto: number;
+}
 
 export interface DisciplineItem {
   id: string;
@@ -24,6 +29,7 @@ export interface Member {
   estado_membresia: MembershipStatus;
   estado_pago: PaymentStatus;
   monto_mensual: number;
+  saldo_pendiente?: number;
   metodo_pago?: PaymentMethod;
   ultimo_pago_fecha?: string;
   creado_en: string;
@@ -47,9 +53,11 @@ export interface PaymentLog {
   member_id: string;
   fecha: string;
   monto: number;
-  metodo: PaymentMethod | 'Tarjeta';
+  metodo: PaymentMethod | 'Tarjeta' | string;
   periodo_inicio: string;
   periodo_fin: string;
+  detalles?: PaymentMethodDetail[];
+  notas?: string;
 }
 
 export type UserRole = 'admin' | 'user';
@@ -62,8 +70,12 @@ export interface CurrentUser {
 
 export interface RenewMemberOptions {
   monto?: number;
-  metodo?: PaymentMethod;
+  metodo?: PaymentMethod | string;
+  detalles?: PaymentMethodDetail[];
   disciplina?: string;
   fechaRenovacion?: string;
   fechaVencimiento?: string;
+  saldoPendiente?: number;
+  esPagoSaldo?: boolean;
+  notas?: string;
 }

@@ -56,7 +56,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
     if (found) {
       setMatchedMember(found);
       const status = getCalculatedStatus(found.fecha_vencimiento, found.estado_pago);
-      const isAuthorized = status.membershipStatus !== 'vencido' && found.estado_pago === 'pagado';
+      const isAuthorized = status.membershipStatus !== 'vencido' && (found.estado_pago === 'pagado' || found.estado_pago === 'parcial');
 
       if (isAuthorized) {
         playSuccessChime();
@@ -70,7 +70,11 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
         member_name: `${found.nombre} ${found.apellido}`,
         disciplina: found.disciplina,
         autorizado: isAuthorized,
-        motivo: isAuthorized ? 'Acceso Válido - Al Día' : 'Denegado - Membresía vencida o impago',
+        motivo: isAuthorized
+          ? found.estado_pago === 'parcial'
+            ? `Acceso Válido (Saldo pendiente: $${(found.saldo_pendiente || 0).toLocaleString('es-AR')})`
+            : 'Acceso Válido - Al Día'
+          : 'Denegado - Membresía vencida o impago',
       });
       setAccessLogged(true);
     } else {
@@ -109,7 +113,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                 });
               }
             },
-            () => {}
+            () => { }
           );
 
           if (isMounted) {
@@ -131,14 +135,14 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
         isMounted = false;
         clearTimeout(timer);
         if (scannerRef.current && scannerRef.current.isScanning) {
-          scannerRef.current.stop().catch(() => {});
+          scannerRef.current.stop().catch(() => { });
         }
       };
     }
 
     return () => {
       if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(() => {});
+        scannerRef.current.stop().catch(() => { });
       }
     };
   }, [isOpen, scannedResult]);
@@ -189,7 +193,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
             <button
               onClick={() => {
                 if (scannerRef.current && scannerRef.current.isScanning) {
-                  scannerRef.current.stop().catch(() => {});
+                  scannerRef.current.stop().catch(() => { });
                 }
                 onClose();
               }}
@@ -201,192 +205,174 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
           {/* Modal Content */}
           <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
-          {/* STATE 1: SCANNING */}
-          {!scannedResult && (
-            <div className="space-y-3 sm:space-y-4">
-              {/* Camera Preview Area - Clean B&W */}
-              <div className="relative rounded-xl overflow-hidden bg-black aspect-square max-w-[280px] mx-auto border-2 border-neutral-800 flex items-center justify-center">
-                <div id={containerId} className="w-full h-full" />
-                <div className="absolute inset-4 pointer-events-none border border-white/40 rounded-lg flex items-center justify-center">
-                  <div className="w-8 h-0.5 bg-white" />
-                </div>
-              </div>
-
-              {cameraError && (
-                <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-xs text-neutral-400">
-                  {cameraError}
-                </div>
-              )}
-
-              {/* Manual search and Upload */}
-              <div className="bg-black p-3 rounded-xl border border-neutral-800 space-y-2.5">
-                <div className="flex items-center justify-between text-xs text-neutral-400">
-                  <span className="font-mono text-[11px]">Validación Rápida:</span>
-                  <label className="cursor-pointer text-white hover:underline flex items-center gap-1 font-mono text-[11px]">
-                    <Upload className="w-3 h-3" />
-                    Subir foto
-                    <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                  </label>
-                </div>
-
-                <form onSubmit={handleManualSearch} className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={manualCode}
-                    onChange={(e) => setManualCode(e.target.value)}
-                    placeholder="DNI o Código de carnet..."
-                    className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-white text-black text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
-                  >
-                    Validar
-                  </button>
-                </form>
-
-                {/* Quick test member tags */}
-                <div className="pt-2 border-t border-neutral-900">
-                  <span className="text-[10px] text-neutral-500 uppercase font-mono block mb-1">
-                    Prueba rápida con socios:
-                  </span>
-                  <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                    {members.slice(0, 4).map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => processQrToken(m.codigo_qr)}
-                        className="text-[10px] px-2 py-0.5 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 font-mono"
-                      >
-                        {m.nombre} ({m.dni})
-                      </button>
-                    ))}
+            {/* STATE 1: SCANNING */}
+            {!scannedResult && (
+              <div className="space-y-3 sm:space-y-4">
+                {/* Camera Preview Area - Clean B&W */}
+                <div className="relative rounded-xl overflow-hidden bg-black aspect-square max-w-[280px] mx-auto border-2 border-neutral-800 flex items-center justify-center">
+                  <div id={containerId} className="w-full h-full" />
+                  <div className="absolute inset-4 pointer-events-none border border-white/40 rounded-lg flex items-center justify-center">
+                    <div className="w-8 h-0.5 bg-white" />
                   </div>
                 </div>
+
+                {cameraError && (
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-xs text-neutral-400">
+                    {cameraError}
+                  </div>
+                )}
+
+                {/* Manual search and Upload */}
+                <div className="bg-black p-3 rounded-xl border border-neutral-800 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs text-neutral-400">
+                    <span className="font-mono text-[11px]">Validación Rápida:</span>
+                    <label className="cursor-pointer text-white hover:underline flex items-center gap-1 font-mono text-[11px]">
+                      <Upload className="w-3 h-3" />
+                      Subir foto
+                      <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                    </label>
+                  </div>
+
+                  <form onSubmit={handleManualSearch} className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={manualCode}
+                      onChange={(e) => setManualCode(e.target.value)}
+                      placeholder="DNI o Código de carnet..."
+                      className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-white text-black text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                    >
+                      Validar
+                    </button>
+                  </form>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div id="file-scanner-temp" className="hidden" />
+            <div id="file-scanner-temp" className="hidden" />
 
-          {/* STATE 2: SCAN RESULT INSPECTION */}
-          {scannedResult && (
-            <div className="space-y-3">
-              {matchedMember ? (
-                (() => {
-                  const status = getCalculatedStatus(matchedMember.fecha_vencimiento, matchedMember.estado_pago);
-                  const isAuthorized = status.membershipStatus !== 'vencido' && matchedMember.estado_pago === 'pagado';
+            {/* STATE 2: SCAN RESULT INSPECTION */}
+            {scannedResult && (
+              <div className="space-y-3">
+                {matchedMember ? (
+                  (() => {
+                    const status = getCalculatedStatus(matchedMember.fecha_vencimiento, matchedMember.estado_pago);
+                    const isAuthorized = status.membershipStatus !== 'vencido' && (matchedMember.estado_pago === 'pagado' || matchedMember.estado_pago === 'parcial');
 
-                  return (
-                    <div className="space-y-3">
-                      {/* B&W Authorization Header */}
-                      <div
-                        className={`rounded-xl p-4 border text-center ${
-                          isAuthorized
-                            ? 'bg-white text-black border-white'
-                            : 'bg-black text-white border-neutral-700'
-                        }`}
-                      >
-                        <div className="text-2xl font-black uppercase tracking-wider font-mono">
-                          {isAuthorized ? 'ACCESO AUTORIZADO' : 'ACCESO DENEGADO'}
+                    return (
+                      <div className="space-y-3">
+                        {/* B&W Authorization Header */}
+                        <div
+                          className={`rounded-xl p-4 border text-center ${isAuthorized
+                              ? 'bg-white text-black border-white'
+                              : 'bg-black text-white border-neutral-700'
+                            }`}
+                        >
+                          <div className="text-2xl font-black uppercase tracking-wider font-mono">
+                            {isAuthorized ? 'ACCESO AUTORIZADO' : 'ACCESO DENEGADO'}
+                          </div>
+                          <p className={`text-xs mt-1 font-mono ${isAuthorized ? 'text-neutral-800' : 'text-neutral-400'}`}>
+                            {isAuthorized
+                              ? matchedMember.estado_pago === 'parcial'
+                                ? `Membresía activa • Saldo pendiente: $${(matchedMember.saldo_pendiente || 0).toLocaleString('es-AR')}`
+                                : 'Membresía al día • Adelante'
+                              : matchedMember.estado_pago === 'pendiente'
+                                ? 'Cuota pendiente de pago'
+                                : 'Membresía mensual vencida'}
+                          </p>
                         </div>
-                        <p className={`text-xs mt-1 font-mono ${isAuthorized ? 'text-neutral-800' : 'text-neutral-400'}`}>
-                          {isAuthorized
-                            ? 'Membresía al día • Adelante'
-                            : matchedMember.estado_pago === 'pendiente'
-                            ? 'Cuota pendiente de pago'
-                            : 'Membresía mensual vencida'}
-                        </p>
-                      </div>
 
-                      {/* Member Info Card */}
-                      <div className="bg-black border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
-                        <div className="flex items-center gap-3">
-                          <MemberAvatar
-                            src={matchedMember.foto_url}
-                            name={`${matchedMember.nombre} ${matchedMember.apellido}`}
-                            className="w-12 h-12 rounded-lg"
-                          />
-                          <div>
-                            <h4 className="font-black text-sm text-white">
-                              {matchedMember.nombre} {matchedMember.apellido}
-                            </h4>
-                            <div className="flex items-center gap-2 mt-0.5 text-xs text-neutral-400 font-mono">
-                              <span>DNI: {matchedMember.dni}</span>
-                              <span>•</span>
-                              <span>{matchedMember.disciplina}</span>
+                        {/* Member Info Card */}
+                        <div className="bg-black border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
+                          <div className="flex items-center gap-3">
+                            <MemberAvatar
+                              src={matchedMember.foto_url}
+                              name={`${matchedMember.nombre} ${matchedMember.apellido}`}
+                              className="w-12 h-12 rounded-lg"
+                            />
+                            <div>
+                              <h4 className="font-black text-sm text-white">
+                                {matchedMember.nombre} {matchedMember.apellido}
+                              </h4>
+                              <div className="flex items-center gap-2 mt-0.5 text-xs text-neutral-400 font-mono">
+                                <span>DNI: {matchedMember.dni}</span>
+                                <span>•</span>
+                                <span>{matchedMember.disciplina}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-neutral-900">
+                            <div>
+                              <span className="text-[10px] text-neutral-500 uppercase block">Vencimiento</span>
+                              <span className="text-white font-bold">
+                                {formatDisplayDate(matchedMember.fecha_vencimiento)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-neutral-500 uppercase block">Días Restantes</span>
+                              <span className="text-white font-bold">
+                                {status.daysRemaining < 0
+                                  ? `${Math.abs(status.daysRemaining)}d vencido`
+                                  : `${status.daysRemaining} días`}
+                              </span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-neutral-900">
-                          <div>
-                            <span className="text-[10px] text-neutral-500 uppercase block">Vencimiento</span>
-                            <span className="text-white font-bold">
-                              {formatDisplayDate(matchedMember.fecha_vencimiento)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-neutral-500 uppercase block">Días Restantes</span>
-                            <span className="text-white font-bold">
-                              {status.daysRemaining < 0
-                                ? `${Math.abs(status.daysRemaining)}d vencido`
-                                : `${status.daysRemaining} días`}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                        {/* Actions */}
+                        <div className="space-y-1.5 pt-1">
+                          {!isAuthorized && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await onRenewMember(matchedMember.id);
+                                handleResetScan();
+                              }}
+                              className="w-full py-2.5 px-4 bg-white hover:bg-neutral-200 active:scale-95 text-black font-black text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                              Cobrar y Renovar Mes Ahora
+                            </button>
+                          )}
 
-                      {/* Actions */}
-                      <div className="space-y-1.5 pt-1">
-                        {!isAuthorized && (
                           <button
                             type="button"
-                            onClick={async () => {
-                              await onRenewMember(matchedMember.id);
-                              handleResetScan();
-                            }}
-                            className="w-full py-2.5 px-4 bg-white hover:bg-neutral-200 active:scale-95 text-black font-black text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2"
+                            onClick={handleResetScan}
+                            className="w-full py-2.5 px-4 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white text-xs font-bold rounded-lg border border-neutral-700 flex items-center justify-center gap-2"
                           >
-                            <CreditCard className="w-4 h-4" />
-                            Cobrar y Renovar Mes Ahora
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            Escanear Siguiente Socio
                           </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={handleResetScan}
-                          className="w-full py-2.5 px-4 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white text-xs font-bold rounded-lg border border-neutral-700 flex items-center justify-center gap-2"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          Escanear Siguiente Socio
-                        </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })()
-              ) : (
-                /* Unmatched */
-                <div className="text-center py-6 space-y-3">
-                  <div className="text-base font-black text-white font-mono">CÓDIGO NO ENCONTRADO</div>
-                  <p className="text-xs text-neutral-400 font-mono break-all px-4">
-                    "{scannedResult}"
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleResetScan}
-                    className="py-2 px-4 bg-white text-black text-xs font-bold rounded-lg inline-flex items-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Reintentar
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                    );
+                  })()
+                ) : (
+                  /* Unmatched */
+                  <div className="text-center py-6 space-y-3">
+                    <div className="text-base font-black text-white font-mono">CÓDIGO NO ENCONTRADO</div>
+                    <p className="text-xs text-neutral-400 font-mono break-all px-4">
+                      "{scannedResult}"
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleResetScan}
+                      className="py-2 px-4 bg-white text-black text-xs font-bold rounded-lg inline-flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Reintentar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
-  </div>
   );
 };

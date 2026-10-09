@@ -157,6 +157,7 @@ export default function App() {
         adminUser={adminUser}
         onLogoutAdmin={handleLogoutAdmin}
         onOpenConfigModal={() => setIsConfigModalOpen(true)}
+        onOpenScanner={() => setIsScannerOpen(true)}
       />
 
       {/* Main Body */}

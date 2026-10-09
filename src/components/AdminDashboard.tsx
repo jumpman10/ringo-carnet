@@ -203,10 +203,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>{expiringTwoDaysMembers}</span>
             <ArrowUpRight className="w-4 h-4 text-neutral-400" />
           </div>
-          <div className="text-[10px] text-neutral-300 mt-0.5 flex items-center gap-1">
-            <MessageCircle className="w-3 h-3 text-white" />
-            <span>Avisar WhatsApp</span>
-          </div>
         </div>
 
         {/* Expired / Unpaid */}
@@ -423,10 +419,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${member.estado_pago === 'pagado'
                           ? 'bg-neutral-900 text-white border border-neutral-700'
+                          : member.estado_pago === 'parcial'
+                          ? 'bg-amber-950/70 text-amber-300 border border-amber-600/60'
                           : 'bg-black text-neutral-500 border border-neutral-900 line-through'
                           }`}
                       >
-                        {member.estado_pago === 'pagado' ? 'Pagado' : 'Impago'}
+                        {member.estado_pago === 'pagado'
+                          ? 'Pagado'
+                          : member.estado_pago === 'parcial'
+                          ? `Parcial (-$${(member.saldo_pendiente || 0).toLocaleString('es-AR')})`
+                          : 'Impago'}
                       </span>
                     </div>
 
@@ -576,10 +578,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span
                               className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${member.estado_pago === 'pagado'
                                 ? 'bg-neutral-900 text-white border border-neutral-700'
+                                : member.estado_pago === 'parcial'
+                                ? 'bg-amber-950/70 text-amber-300 border border-amber-600/60'
                                 : 'bg-black text-neutral-500 border border-neutral-800 line-through'
                                 }`}
                             >
-                              {member.estado_pago === 'pagado' ? 'Pagado' : 'Pendiente'}
+                              {member.estado_pago === 'pagado'
+                                ? 'Pagado'
+                                : member.estado_pago === 'parcial'
+                                ? `Parcial (-$${(member.saldo_pendiente || 0).toLocaleString('es-AR')})`
+                                : 'Pendiente'}
                             </span>
                           </td>
 
@@ -811,16 +819,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="py-2.5 px-3 font-bold text-white font-sans">
                           {member ? `${member.nombre} ${member.apellido}` : 'Socio'}
                         </td>
-                        <td className="py-2.5 px-3 font-bold text-white">
+                        <td className="py-2.5 px-3 font-bold text-white font-mono">
                           ${pay.monto.toLocaleString('es-AR')}
                         </td>
                         <td className="py-2.5 px-3">
-                          <span className="text-[11px] bg-neutral-900 text-neutral-300 px-2 py-0.5 rounded border border-neutral-800">
-                            {pay.metodo}
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="text-[11px] bg-neutral-900 text-neutral-200 px-2 py-0.5 rounded border border-neutral-800 font-bold inline-block">
+                              {pay.metodo}
+                            </span>
+                            {pay.detalles && pay.detalles.length > 1 && (
+                              <div className="flex flex-wrap gap-1 text-[10px] font-mono text-neutral-400">
+                                {pay.detalles.map((d, idx) => (
+                                  <span key={idx} className="bg-black/80 px-1.5 py-0.5 rounded border border-neutral-800 text-neutral-300">
+                                    {d.metodo}: ${d.monto.toLocaleString('es-AR')}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="py-2.5 px-3 text-neutral-400 text-[11px]">
-                          {formatDisplayDate(pay.periodo_inicio)} al {formatDisplayDate(pay.periodo_fin)}
+                          <div>
+                            {formatDisplayDate(pay.periodo_inicio)} al {formatDisplayDate(pay.periodo_fin)}
+                          </div>
+                          {pay.notas && (
+                            <div className="text-[10px] text-neutral-500 italic mt-0.5 font-sans">
+                              Nota: {pay.notas}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
