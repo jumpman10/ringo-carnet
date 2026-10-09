@@ -1,4 +1,4 @@
-import { Member, AccessLog, PaymentLog, Discipline, DisciplineItem, PaymentMethod, RenewMemberOptions } from '../types';
+import { Member, AccessLog, PaymentLog, Discipline, DisciplineItem, PaymentMethod, PaymentMethodDetail, RenewMemberOptions } from '../types';
 import { calculateNextExpiration, formatDateISO } from './dateUtils';
 import { getSupabase } from './supabase';
 
@@ -178,7 +178,12 @@ export async function createMember(memberData: Omit<Member, 'id' | 'codigo_qr' |
   if (supabase) {
     try {
       const { metodo_pago, ...dbMember } = newMember;
-      const { error } = await supabase.from('miembros').insert([dbMember]);
+      let { error } = await supabase.from('miembros').insert([dbMember]);
+      if (error && (error.message?.includes('saldo_pendiente') || error.code === '42703')) {
+        const { saldo_pendiente, ...safeMember } = dbMember;
+        const retry = await supabase.from('miembros').insert([safeMember]);
+        error = retry.error;
+      }
       if (error) {
         console.error('Error saving member to Supabase:', error);
       }
@@ -238,7 +243,12 @@ export async function updateMember(
       // Strip 'metodo_pago' from updates sent to 'miembros' table
       const { metodo_pago, ...dbUpdates } = updates;
       if (Object.keys(dbUpdates).length > 0) {
-        const { error } = await supabase.from('miembros').update(dbUpdates).eq('id', id);
+        let { error } = await supabase.from('miembros').update(dbUpdates).eq('id', id);
+        if (error && (error.message?.includes('saldo_pendiente') || error.code === '42703')) {
+          const { saldo_pendiente, ...safeUpdates } = dbUpdates;
+          const retry = await supabase.from('miembros').update(safeUpdates).eq('id', id);
+          error = retry.error;
+        }
         if (error) {
           console.error('Error updating member in Supabase:', error);
         }
@@ -296,10 +306,14 @@ export async function renewMemberMembership(
   legacyMetodo: PaymentMethod = 'Efectivo'
 ): Promise<Member | null> {
   let monto: number | undefined;
-  let metodo: PaymentMethod = legacyMetodo;
+  let metodo: PaymentMethod | string = legacyMetodo;
+  let detalles: PaymentMethodDetail[] | undefined;
   let disciplina: string | undefined;
   let fechaRenovacion: string | undefined;
   let fechaVencimiento: string | undefined;
+  let saldoPendiente: number | undefined;
+  let esPagoSaldo: boolean | undefined;
+  let notas: string | undefined;
 
   if (typeof optionsOrMonto === 'number') {
     monto = optionsOrMonto;
@@ -307,9 +321,13 @@ export async function renewMemberMembership(
   } else if (typeof optionsOrMonto === 'object' && optionsOrMonto !== null) {
     monto = optionsOrMonto.monto;
     metodo = optionsOrMonto.metodo || 'Efectivo';
+    detalles = optionsOrMonto.detalles;
     disciplina = optionsOrMonto.disciplina;
     fechaRenovacion = optionsOrMonto.fechaRenovacion;
     fechaVencimiento = optionsOrMonto.fechaVencimiento;
+    saldoPendiente = optionsOrMonto.saldoPendiente;
+    esPagoSaldo = optionsOrMonto.esPagoSaldo;
+    notas = optionsOrMonto.notas;
   }
 
   const current = await fetchMembers();
@@ -319,17 +337,50 @@ export async function renewMemberMembership(
   const today = formatDateISO(new Date());
   const renewalDate = fechaRenovacion || today;
 
-  // New expiration date based on current expiration (or renewal date if expired)
+  // Case A: Paying off existing pending balance only
+  if (esPagoSaldo) {
+    const nuevoSaldo = Math.max(0, (member.saldo_pendiente || 0) - (monto || 0));
+    const updates: Partial<Member> = {
+      saldo_pendiente: nuevoSaldo,
+      estado_pago: nuevoSaldo === 0 ? 'pagado' : 'parcial',
+      ultimo_pago_fecha: renewalDate,
+    };
+    if (metodo) updates.metodo_pago = metodo as PaymentMethod;
+
+    const updated = await updateMember(memberId, updates, { skipPaymentLog: true });
+
+    await logPayment({
+      member_id: memberId,
+      fecha: renewalDate,
+      monto: monto || 0,
+      metodo: metodo as any,
+      periodo_inicio: member.fecha_ingreso,
+      periodo_fin: member.fecha_vencimiento,
+      detalles: detalles && detalles.length > 0 ? detalles : undefined,
+      notas: notas || `Cancelación de saldo pendiente (Restante: $${nuevoSaldo})`,
+    });
+
+    return updated;
+  }
+
+  // Case B: Membership renewal (full or partial)
   const baseDate = member.fecha_vencimiento && member.fecha_vencimiento >= renewalDate
     ? member.fecha_vencimiento
     : renewalDate;
 
   const newExpiration = fechaVencimiento || calculateNextExpiration(baseDate);
 
+  const nuevoSaldo = saldoPendiente !== undefined 
+    ? Math.max(0, saldoPendiente) 
+    : 0;
+
+  const nuevoEstadoPago: PaymentStatus = nuevoSaldo > 0 ? 'parcial' : 'pagado';
+
   const updates: Partial<Member> = {
     fecha_vencimiento: newExpiration,
     estado_membresia: 'activo',
-    estado_pago: 'pagado',
+    estado_pago: nuevoEstadoPago,
+    saldo_pendiente: nuevoSaldo,
     ultimo_pago_fecha: renewalDate,
   };
 
@@ -340,7 +391,7 @@ export async function renewMemberMembership(
     updates.monto_mensual = monto;
   }
   if (metodo) {
-    updates.metodo_pago = metodo;
+    updates.metodo_pago = metodo as PaymentMethod;
   }
 
   const updated = await updateMember(
@@ -354,9 +405,11 @@ export async function renewMemberMembership(
     member_id: memberId,
     fecha: renewalDate,
     monto: monto !== undefined ? monto : (member.monto_mensual || 28000),
-    metodo,
+    metodo: metodo as any,
     periodo_inicio: baseDate,
     periodo_fin: newExpiration,
+    detalles: detalles && detalles.length > 0 ? detalles : undefined,
+    notas: notas || (nuevoSaldo > 0 ? `Pago parcial (Saldo pendiente: $${nuevoSaldo})` : undefined),
   });
 
   return updated;
@@ -438,14 +491,30 @@ export async function logPayment(payment: Omit<PaymentLog, 'id'>): Promise<Payme
   const supabase = getSupabase();
   if (supabase) {
     try {
-      const { data, error } = await supabase.from('pagos').insert([{
+      const payload: any = {
         member_id: newPayment.member_id,
         fecha: newPayment.fecha,
         monto: Number(newPayment.monto),
         metodo: newPayment.metodo,
         periodo_inicio: newPayment.periodo_inicio,
-        periodo_fin: newPayment.periodo_fin
-      }]).select().single();
+        periodo_fin: newPayment.periodo_fin,
+      };
+      if (newPayment.detalles && newPayment.detalles.length > 0) {
+        payload.detalles = newPayment.detalles;
+      }
+      if (newPayment.notas) {
+        payload.notas = newPayment.notas;
+      }
+
+      let { data, error } = await supabase.from('pagos').insert([payload]).select().single();
+
+      if (error && (error.message?.includes('detalles') || error.message?.includes('notas') || error.code === '42703')) {
+        delete payload.detalles;
+        delete payload.notas;
+        const retry = await supabase.from('pagos').insert([payload]).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         console.error('Could not save payment to Supabase:', error);

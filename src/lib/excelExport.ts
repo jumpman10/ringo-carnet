@@ -104,15 +104,20 @@ export function exportAccessLogsToExcel(logs: AccessLog[]) {
 export function exportPaymentLogsToExcel(payments: PaymentLog[], members: Member[]) {
   const data = payments.map((pay) => {
     const member = members.find((m) => m.id === pay.member_id);
+    let metodoDetallado = String(pay.metodo || 'Efectivo');
+    if (pay.detalles && pay.detalles.length > 1) {
+      metodoDetallado = `Mixto (${pay.detalles.map(d => `${d.metodo}: $${d.monto}`).join(' / ')})`;
+    }
     return {
       'Fecha Cobro': formatDisplayDate(pay.fecha),
       Socio: member ? `${member.nombre} ${member.apellido}` : 'Socio desconocido',
       DNI: member ? member.dni : '-',
       Disciplina: member ? member.disciplina : '-',
       'Monto ($)': pay.monto,
-      'Método de Pago': pay.metodo,
+      'Método de Pago': metodoDetallado,
       'Período Desde': formatDisplayDate(pay.periodo_inicio),
       'Período Hasta': formatDisplayDate(pay.periodo_fin),
+      'Observaciones / Notas': pay.notas || '-',
     };
   });
 
@@ -124,9 +129,10 @@ export function exportPaymentLogsToExcel(payments: PaymentLog[], members: Member
     { wch: 14 },
     { wch: 18 },
     { wch: 14 },
+    { wch: 32 },
     { wch: 16 },
     { wch: 16 },
-    { wch: 16 },
+    { wch: 30 },
   ];
 
   exportToExcel(data, 'Cobros', fileName, columnWidths);

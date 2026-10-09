@@ -44,6 +44,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
   const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [montoMensual, setMontoMensual] = useState<number>(28000);
   const [estadoPago, setEstadoPago] = useState<PaymentStatus>('pagado');
+  const [saldoPendiente, setSaldoPendiente] = useState<number>(0);
   const [metodoPago, setMetodoPago] = useState<PaymentMethod>('Efectivo');
   const [fotoUrl, setFotoUrl] = useState('');
   const [notas, setNotas] = useState('');
@@ -62,6 +63,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       setFechaVencimiento(member.fecha_vencimiento);
       setMontoMensual(member.monto_mensual || 28000);
       setEstadoPago(member.estado_pago);
+      setSaldoPendiente(member.saldo_pendiente || 0);
       setMetodoPago(member.metodo_pago || 'Efectivo');
       setFotoUrl(member.foto_url || '');
       setNotas(member.notas || '');
@@ -77,6 +79,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       setFechaVencimiento(calculateNextExpiration(today));
       setMontoMensual(defaultDisc.precio);
       setEstadoPago('pagado');
+      setSaldoPendiente(0);
       setMetodoPago('Efectivo');
       setFotoUrl('');
       setNotas('');
@@ -139,6 +142,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
         fecha_vencimiento: calculatedVencimiento,
         estado_membresia: estadoMembresia,
         estado_pago: estadoPago,
+        saldo_pendiente: estadoPago === 'parcial' ? Number(saldoPendiente || 0) : 0,
         metodo_pago: metodoPago,
         monto_mensual: Number(montoMensual),
         foto_url: fotoUrl.trim(),
@@ -315,64 +319,102 @@ export const MemberModal: React.FC<MemberModalProps> = ({
             </div>
 
             {/* Estado de Pago y Método */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-950 p-3 rounded-xl border border-neutral-900">
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
-                  Estado de Pago Inicial
-                </label>
-                <div className="flex items-center gap-2">
-                  <label
-                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${estadoPago === 'pagado'
-                        ? 'bg-white text-black font-black border-white'
-                        : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                      }`}
-                  >
-                    <input
-                      type="radio"
-                      name="estadoPago"
-                      checked={estadoPago === 'pagado'}
-                      onChange={() => setEstadoPago('pagado')}
-                      className="hidden"
-                    />
-                    <Check className="w-3 h-3" />
-                    <span className="text-[11px] font-mono uppercase">Pagado</span>
+            <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-900 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
+                    Estado de Pago Inicial
                   </label>
+                  <div className="flex items-center gap-1.5">
+                    <label
+                      className={`flex-1 py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${estadoPago === 'pagado'
+                          ? 'bg-white text-black font-black border-white'
+                          : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                        }`}
+                    >
+                      <input
+                        type="radio"
+                        name="estadoPago"
+                        checked={estadoPago === 'pagado'}
+                        onChange={() => setEstadoPago('pagado')}
+                        className="hidden"
+                      />
+                      <Check className="w-3 h-3" />
+                      <span className="text-[10px] font-mono uppercase">Pagado</span>
+                    </label>
 
-                  <label
-                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 ${estadoPago === 'pendiente'
-                        ? 'bg-neutral-800 text-white font-bold border-neutral-600'
-                        : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                      }`}
-                  >
-                    <input
-                      type="radio"
-                      name="estadoPago"
-                      checked={estadoPago === 'pendiente'}
-                      onChange={() => setEstadoPago('pendiente')}
-                      className="hidden"
-                    />
-                    <span className="text-[11px] font-mono uppercase">Pendiente</span>
+                    <label
+                      className={`flex-1 py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${estadoPago === 'parcial'
+                          ? 'bg-amber-400 text-black font-black border-amber-300'
+                          : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                        }`}
+                    >
+                      <input
+                        type="radio"
+                        name="estadoPago"
+                        checked={estadoPago === 'parcial'}
+                        onChange={() => setEstadoPago('parcial')}
+                        className="hidden"
+                      />
+                      <span className="text-[10px] font-mono uppercase">Parcial</span>
+                    </label>
+
+                    <label
+                      className={`flex-1 py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${estadoPago === 'pendiente'
+                          ? 'bg-neutral-800 text-white font-bold border-neutral-600'
+                          : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                        }`}
+                    >
+                      <input
+                        type="radio"
+                        name="estadoPago"
+                        checked={estadoPago === 'pendiente'}
+                        onChange={() => setEstadoPago('pendiente')}
+                        className="hidden"
+                      />
+                      <span className="text-[10px] font-mono uppercase">Pendiente</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
+                    Método de Pago
                   </label>
+                  <select
+                    value={metodoPago}
+                    onChange={(e) => setMetodoPago(e.target.value as PaymentMethod)}
+                    disabled={estadoPago === 'pendiente'}
+                    className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono disabled:opacity-40"
+                  >
+                    {PAYMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>
+                        {method}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
-                  Método de Pago
-                </label>
-                <select
-                  value={metodoPago}
-                  onChange={(e) => setMetodoPago(e.target.value as PaymentMethod)}
-                  disabled={estadoPago === 'pendiente'}
-                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono disabled:opacity-40"
-                >
-                  {PAYMENT_METHODS.map((method) => (
-                    <option key={method} value={method}>
-                      {method}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Si es Pago Parcial, input para Saldo Pendiente */}
+              {estadoPago === 'parcial' && (
+                <div className="pt-2 border-t border-neutral-850 flex items-center justify-between gap-3">
+                  <span className="text-xs text-amber-300 font-bold">
+                    Saldo pendiente adeudado ($):
+                  </span>
+                  <div className="w-36">
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={saldoPendiente}
+                      onChange={(e) => setSaldoPendiente(Number(e.target.value) || 0)}
+                      className="w-full bg-black border border-amber-600/50 rounded-lg px-2.5 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Foto de Perfil Carnet 1:1 */}

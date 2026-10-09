@@ -94,6 +94,15 @@ export function getCalculatedStatus(
     };
   }
 
+  if (paymentStatus === 'parcial') {
+    return {
+      membershipStatus: 'activo',
+      daysRemaining,
+      label: daysRemaining === 0 ? 'Vence hoy (Pago Parcial)' : `${daysRemaining} días (Pago Parcial)`,
+      color: 'bg-neutral-900 text-amber-300 border border-amber-500/40 font-bold',
+    };
+  }
+
   if (daysRemaining <= 2) {
     return {
       membershipStatus: 'por_vencer',

@@ -3,7 +3,8 @@ import { User } from '../lib/supabase';
 import {
   LogOut,
   Shield,
-  Settings
+  Settings,
+  QrCode
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -12,6 +13,7 @@ interface NavbarProps {
   adminUser: User | null;
   onLogoutAdmin: () => void;
   onOpenConfigModal: () => void;
+  onOpenScanner?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,6 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   adminUser,
   onLogoutAdmin,
   onOpenConfigModal,
+  onOpenScanner,
 }) => {
   const isAdminRoute = currentPath === '/admin' || currentPath.startsWith('/admin/');
 
@@ -56,6 +59,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Tools if admin is authenticated */}
               {adminUser && (
                 <>
+                  {/* Botón Escanear QR */}
+                  {onOpenScanner && (
+                    <button
+                      onClick={onOpenScanner}
+                      className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-white hover:bg-neutral-200 active:scale-95 text-black rounded-lg border border-white flex items-center gap-1.5 text-xs font-mono font-bold transition-all shadow-sm"
+                      title="Escanear código QR de socio"
+                    >
+                      <QrCode className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span className="hidden sm:inline">Escanear QR</span>
+                    </button>
+                  )}
+
                   {/* Botón Configurar */}
                   <button
                     onClick={onOpenConfigModal}
