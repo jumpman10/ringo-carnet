@@ -82,33 +82,34 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl relative my-4">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold">
-              <Shield className="w-4 h-4" />
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-sm">
+      <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl relative my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                  {isSignUp ? 'Crear Administrador' : 'Acceso Administrador'}
+                </h3>
+                <p className="text-[11px] text-neutral-400 font-mono">
+                  Autenticación Supabase Auth
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-black text-sm sm:text-base text-white uppercase tracking-wider">
-                {isSignUp ? 'Crear Administrador' : 'Acceso Administrador'}
-              </h3>
-              <p className="text-[11px] text-neutral-400 font-mono">
-                Autenticación Supabase Auth
-              </p>
-            </div>
+            <button
+              onClick={onClose}
+              className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-900 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-900 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="p-4 sm:p-5 space-y-4">
+          {/* Body */}
+          <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
           {!isConfigured && (
             <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800 text-neutral-300 text-xs space-y-2 font-mono">
               <div className="flex items-center gap-2 text-white font-bold">
@@ -217,5 +218,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         </div>
       </div>
     </div>
+  </div>
   );
 };

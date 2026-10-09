@@ -120,8 +120,9 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
   const isPaidThroughFuture = member.fecha_vencimiento && member.fecha_vencimiento >= fechaRenovacion;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative my-4 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-sm">
+      <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black shrink-0">
           <div className="flex items-center gap-3">
@@ -355,5 +356,6 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
         </form>
       </div>
     </div>
+  </div>
   );
 };

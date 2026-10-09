@@ -148,33 +148,34 @@ export const DisciplineConfigModal: React.FC<DisciplineConfigModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl my-4 sm:my-8 overflow-hidden shadow-2xl relative">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold">
-              <Settings className="w-4 h-4" />
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-sm">
+      <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl relative my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold">
+                <Settings className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-white uppercase tracking-wider">
+                  Configurar Disciplinas y Precios
+                </h2>
+                <p className="text-[11px] text-neutral-400 font-mono">
+                  Tarifas fijas de cuotas mensuales
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-black text-white uppercase tracking-wider">
-                Configurar Disciplinas y Precios
-              </h2>
-              <p className="text-[11px] text-neutral-400 font-mono">
-                Tarifas fijas de cuotas mensuales
-              </p>
-            </div>
+            <button
+              onClick={onClose}
+              className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-900 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-900 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+          {/* Body */}
+          <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
           {errorMsg && (
             <div className="p-2.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs font-mono flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-white shrink-0" />
@@ -353,7 +354,7 @@ export const DisciplineConfigModal: React.FC<DisciplineConfigModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 border-t border-neutral-800 bg-black flex justify-between items-center text-[11px] font-mono text-neutral-500">
+        <div className="p-3 sm:p-4 border-t border-neutral-800 bg-black flex justify-between items-center text-[11px] font-mono text-neutral-500 shrink-0">
           <span>Los cambios aplicarán a los nuevos socios y cuotas calculadas.</span>
           <button
             type="button"
@@ -365,5 +366,6 @@ export const DisciplineConfigModal: React.FC<DisciplineConfigModalProps> = ({
         </div>
       </div>
     </div>
+  </div>
   );
 };

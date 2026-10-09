@@ -161,35 +161,36 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-md">
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="p-3.5 border-b border-neutral-900 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white">
-              <Camera className="w-3.5 h-3.5" />
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/90 backdrop-blur-md">
+      <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[92vh]">
+          {/* Header */}
+          <div className="p-3.5 border-b border-neutral-900 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white">
+                <Camera className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-white uppercase font-mono tracking-wide">
+                  Foto Carnet 1:1
+                </h3>
+                <p className="text-[10px] text-neutral-400 font-mono">
+                  {capturedPhoto ? 'Revisa la foto antes de guardar' : 'Encuadra el rostro en el recuadro'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-black text-white uppercase font-mono tracking-wide">
-                Foto Carnet 1:1
-              </h3>
-              <p className="text-[10px] text-neutral-400 font-mono">
-                {capturedPhoto ? 'Revisa la foto antes de guardar' : 'Encuadra el rostro en el recuadro'}
-              </p>
-            </div>
+
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              className="w-7 h-7 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleCloseModal}
-            className="w-7 h-7 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Viewfinder Content */}
-        <div className="p-4 flex flex-col items-center justify-center bg-black">
+          {/* Viewfinder Content */}
+          <div className="p-4 flex flex-col items-center justify-center bg-black overflow-y-auto flex-1 min-h-0">
           {errorMessage ? (
             <div className="w-full py-12 px-4 text-center space-y-3">
               <div className="w-12 h-12 rounded-xl bg-red-950/40 border border-red-900/60 text-red-400 mx-auto flex items-center justify-center">
@@ -284,7 +285,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
         {/* Footer Actions */}
         {!errorMessage && (
-          <div className="p-3.5 border-t border-neutral-900 bg-[#0c0c0c] flex items-center justify-between gap-2.5">
+          <div className="p-3.5 border-t border-neutral-900 bg-[#0c0c0c] flex items-center justify-between gap-2.5 shrink-0">
             {capturedPhoto ? (
               <>
                 <button
@@ -328,5 +329,6 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         )}
       </div>
     </div>
+  </div>
   );
 };
