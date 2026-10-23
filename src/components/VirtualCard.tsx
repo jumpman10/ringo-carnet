@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import QRCode from 'qrcode';
+import { toJpeg } from 'html-to-image';
 import { Member } from '../types';
 import { getCalculatedStatus, formatDisplayDate } from '../lib/dateUtils';
 import {
@@ -11,7 +12,8 @@ import {
   Check,
   AlertCircle,
   QrCode,
-  User
+  User,
+  Loader2,
 } from 'lucide-react';
 
 interface VirtualCardProps {
@@ -22,6 +24,7 @@ interface VirtualCardProps {
 
 export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showActions = true }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const statusInfo = getCalculatedStatus(member.fecha_vencimiento, member.estado_pago);
 
@@ -38,12 +41,53 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
       .catch((err) => console.error('Error generating QR:', err));
   }, [member.codigo_qr]);
 
-  const handleDownload = () => {
-    if (!qrDataUrl) return;
-    const link = document.createElement('a');
-    link.download = `Carnet_${member.apellido}_${member.dni}.png`;
-    link.href = qrDataUrl;
-    link.click();
+  const handleDownload = async () => {
+    if (!cardRef.current || isDownloading) return;
+
+    setIsDownloading(true);
+    try {
+      const exportOptions = {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: '#0a0a0a',
+        cacheBust: true,
+        filter: (node: Node) => {
+          if (node instanceof Element && node.getAttribute('data-export-hide') === 'true') {
+            return false;
+          }
+          return true;
+        },
+      };
+
+      let dataUrl: string;
+      try {
+        dataUrl = await toJpeg(cardRef.current, exportOptions);
+      } catch (err) {
+        console.warn('Reintentando captura con skipFonts:', err);
+        dataUrl = await toJpeg(cardRef.current, {
+          ...exportOptions,
+          skipFonts: true,
+        });
+      }
+
+      const cleanLastName = (member.apellido || 'Socio')
+        .trim()
+        .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_');
+      const cleanDni = (member.dni || member.id.slice(0, 8)).trim();
+      const fileName = `Carnet_${cleanLastName}_${cleanDni}.jpg`;
+
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error al generar el carnet en JPG:', error);
+      alert('Hubo un inconveniente al generar la imagen del carnet. Por favor intentá nuevamente.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleShare = async () => {
@@ -92,7 +136,7 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
           </div>
 
           {/* Status Badge - Monochrome */}
-          <div className="flex items-center">
+          <div data-export-hide="true" className="flex items-center">
             {statusInfo.membershipStatus === 'activo' ? (
               <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-black border border-white flex items-center gap-1">
                 <Check className="w-3 h-3 stroke-[3]" />
@@ -118,6 +162,7 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
               src={member.foto_url}
               alt={`${member.nombre} ${member.apellido}`}
               className="w-16 h-16 rounded-xl object-cover border border-neutral-700 bg-neutral-900 shrink-0 transition-all"
+              crossOrigin="anonymous"
             />
           ) : (
             <div className="w-16 h-16 rounded-xl border border-dashed border-neutral-700 bg-neutral-950 flex flex-col items-center justify-center text-neutral-500 shrink-0">
@@ -161,7 +206,7 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
         </div>
 
         {/* Days Remaining Counter - Clean Monochrome */}
-        <div className="bg-neutral-950 rounded-xl p-3 border border-neutral-800 mb-3">
+        <div data-export-hide="true" className="bg-neutral-950 rounded-xl p-3 border border-neutral-800 mb-3">
           <div className="flex items-center justify-between text-xs mb-1.5">
             <span className="text-neutral-400 font-medium">Días restantes:</span>
             <span
@@ -202,6 +247,11 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
           <span className="flex items-center gap-1 font-mono">
             <Phone className="w-3 h-3" /> {member.telefono}
           </span>
+          {member.fecha_nacimiento && (
+            <span className="font-mono text-[9px] text-neutral-500">
+              Nac: {formatDisplayDate(member.fecha_nacimiento)}
+            </span>
+          )}
           <span className="font-mono text-[9px] uppercase">ID: {member.id.slice(0, 8)}</span>
         </div>
       </div>
@@ -211,10 +261,20 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
         <div className="flex items-center gap-2 mt-3 w-full justify-center no-print">
           <button
             onClick={handleDownload}
-            className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5"
+            disabled={!qrDataUrl || isDownloading}
+            className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5" />
-            Descargar
+            {isDownloading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Generando JPG...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>Descargar Carnet (JPG)</span>
+              </>
+            )}
           </button>
         </div>
       )}

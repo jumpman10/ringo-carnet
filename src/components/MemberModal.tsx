@@ -26,7 +26,13 @@ interface MemberModalProps {
   disciplines: DisciplineItem[];
 }
 
-const PAYMENT_METHODS: PaymentMethod[] = ['Efectivo', 'Transferencia', 'Tarjeta de crédito'];
+const PAYMENT_METHODS: PaymentMethod[] = [
+  'Efectivo',
+  'Transferencia',
+  'Tarjeta de débito',
+  'Tarjeta de crédito',
+  'Pago con QR',
+];
 
 export const MemberModal: React.FC<MemberModalProps> = ({
   isOpen,
@@ -38,6 +44,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
   const [dni, setDni] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [telefono, setTelefono] = useState('');
   const [disciplina, setDisciplina] = useState('');
   const [fechaIngreso, setFechaIngreso] = useState(formatDateISO(new Date()));
@@ -57,12 +64,13 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       setNombre(member.nombre);
       setApellido(member.apellido);
       setDni(member.dni);
+      setFechaNacimiento(member.fecha_nacimiento || '');
       setTelefono(member.telefono);
       setDisciplina(member.disciplina);
       setFechaIngreso(member.fecha_ingreso);
       setFechaVencimiento(member.fecha_vencimiento);
       setMontoMensual(member.monto_mensual || 28000);
-      setEstadoPago(member.estado_pago);
+      setEstadoPago(member.estado_pago === 'pendiente' ? 'saldo' : member.estado_pago);
       setSaldoPendiente(member.saldo_pendiente || 0);
       setMetodoPago(member.metodo_pago || 'Efectivo');
       setFotoUrl(member.foto_url || '');
@@ -73,6 +81,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       setNombre('');
       setApellido('');
       setDni('');
+      setFechaNacimiento('');
       setTelefono('+54 9 11 ');
       setDisciplina(defaultDisc.nombre);
       setFechaIngreso(today);
@@ -130,19 +139,23 @@ export const MemberModal: React.FC<MemberModalProps> = ({
     setLoading(true);
     try {
       const calculatedVencimiento = fechaVencimiento || calculateNextExpiration(fechaIngreso);
-      const estadoMembresia: MembershipStatus = estadoPago === 'pendiente' ? 'vencido' : 'activo';
+      const isConSaldo = estadoPago === 'saldo' || estadoPago === 'pendiente';
+      const estadoMembresia: MembershipStatus = isConSaldo ? 'vencido' : 'activo';
 
       await onSave({
         nombre: nombre.trim(),
         apellido: apellido.trim(),
         dni: dni.trim(),
+        fecha_nacimiento: fechaNacimiento.trim() || undefined,
         telefono: telefono.trim(),
         disciplina: disciplina || disciplines[0]?.nombre || 'Musculación',
         fecha_ingreso: fechaIngreso,
         fecha_vencimiento: calculatedVencimiento,
         estado_membresia: estadoMembresia,
         estado_pago: estadoPago,
-        saldo_pendiente: estadoPago === 'parcial' ? Number(saldoPendiente || 0) : 0,
+        saldo_pendiente: (estadoPago === 'parcial' || estadoPago === 'saldo')
+          ? Number(saldoPendiente > 0 ? saldoPendiente : (estadoPago === 'saldo' ? montoMensual : 0))
+          : 0,
         metodo_pago: metodoPago,
         monto_mensual: Number(montoMensual),
         foto_url: fotoUrl.trim(),
@@ -221,12 +234,12 @@ export const MemberModal: React.FC<MemberModalProps> = ({
               </div>
             </div>
 
-            {/* DNI y Teléfono */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* DNI, Fecha de Nacimiento y Teléfono */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
                   <Key className="w-3 h-3 text-neutral-400" />
-                  DNI (Clave de acceso) <span className="text-white">*</span>
+                  DNI (Clave) <span className="text-white">*</span>
                 </label>
                 <input
                   type="text"
@@ -235,6 +248,19 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                   onChange={(e) => setDni(e.target.value)}
                   placeholder="40123456"
                   className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-300 uppercase font-mono mb-1 flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3 text-neutral-400" />
+                  Fecha de Nacimiento
+                </label>
+                <input
+                  type="date"
+                  value={fechaNacimiento}
+                  onChange={(e) => setFechaNacimiento(e.target.value)}
+                  className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-mono"
                 />
               </div>
 
@@ -360,7 +386,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                     </label>
 
                     <label
-                      className={`flex-1 py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${estadoPago === 'pendiente'
+                      className={`flex-1 py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${estadoPago === 'saldo' || estadoPago === 'pendiente'
                           ? 'bg-neutral-800 text-white font-bold border-neutral-600'
                           : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
                         }`}
@@ -368,11 +394,14 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                       <input
                         type="radio"
                         name="estadoPago"
-                        checked={estadoPago === 'pendiente'}
-                        onChange={() => setEstadoPago('pendiente')}
+                        checked={estadoPago === 'saldo' || estadoPago === 'pendiente'}
+                        onChange={() => {
+                          setEstadoPago('saldo');
+                          if (!saldoPendiente) setSaldoPendiente(montoMensual);
+                        }}
                         className="hidden"
                       />
-                      <span className="text-[10px] font-mono uppercase">Pendiente</span>
+                      <span className="text-[10px] font-mono uppercase">Saldo</span>
                     </label>
                   </div>
                 </div>
@@ -384,7 +413,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                   <select
                     value={metodoPago}
                     onChange={(e) => setMetodoPago(e.target.value as PaymentMethod)}
-                    disabled={estadoPago === 'pendiente'}
+                    disabled={estadoPago === 'saldo' || estadoPago === 'pendiente'}
                     className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono disabled:opacity-40"
                   >
                     {PAYMENT_METHODS.map((method) => (
@@ -396,11 +425,11 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                 </div>
               </div>
 
-              {/* Si es Pago Parcial, input para Saldo Pendiente */}
-              {estadoPago === 'parcial' && (
+              {/* Si es Pago Parcial o Saldo, input para Saldo Pendiente */}
+              {(estadoPago === 'parcial' || estadoPago === 'saldo') && (
                 <div className="pt-2 border-t border-neutral-850 flex items-center justify-between gap-3">
                   <span className="text-xs text-amber-300 font-bold">
-                    Saldo pendiente adeudado ($):
+                    {estadoPago === 'saldo' ? 'Saldo adeudado ($):' : 'Saldo pendiente adeudado ($):'}
                   </span>
                   <div className="w-36">
                     <input
@@ -410,7 +439,7 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                       value={saldoPendiente}
                       onChange={(e) => setSaldoPendiente(Number(e.target.value) || 0)}
                       className="w-full bg-black border border-amber-600/50 rounded-lg px-2.5 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400"
-                      placeholder="0"
+                      placeholder={String(montoMensual)}
                     />
                   </div>
                 </div>

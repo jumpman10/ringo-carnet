@@ -1,10 +1,16 @@
 export type MembershipStatus = 'activo' | 'por_vencer' | 'vencido' | 'inactivo';
-export type PaymentStatus = 'pagado' | 'pendiente' | 'vencido' | 'parcial';
+export type PaymentStatus = 'pagado' | 'pendiente' | 'vencido' | 'parcial' | 'saldo';
 
-export type PaymentMethod = 'Efectivo' | 'Transferencia' | 'Tarjeta de crédito' | 'Mixto';
+export type PaymentMethod =
+  | 'Efectivo'
+  | 'Transferencia'
+  | 'Tarjeta de débito'
+  | 'Tarjeta de crédito'
+  | 'Pago con QR'
+  | 'Mixto';
 
 export interface PaymentMethodDetail {
-  metodo: 'Efectivo' | 'Transferencia' | 'Tarjeta de crédito';
+  metodo: 'Efectivo' | 'Transferencia' | 'Tarjeta de débito' | 'Tarjeta de crédito' | 'Pago con QR';
   monto: number;
 }
 
@@ -21,6 +27,7 @@ export interface Member {
   dni: string;
   nombre: string;
   apellido: string;
+  fecha_nacimiento?: string; // YYYY-MM-DD
   foto_url: string;
   disciplina: Discipline;
   telefono: string;

@@ -48,7 +48,7 @@ export const Pagination: React.FC<PaginationProps> = ({
     <div
       className={`flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-mono select-none ${className}`}
     >
-      <div className="text-neutral-400 text-[11px] text-center sm:text-left">
+      <div className="text-neutral-400 text-xs sm:text-[11px] text-center sm:text-left">
         Mostrando <span className="text-white font-bold">{startItem}</span> -{' '}
         <span className="text-white font-bold">{endItem}</span> de{' '}
         <span className="text-white font-bold">{totalItems}</span> {itemLabel}
@@ -67,7 +67,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             onClick={() => onPageChange(1)}
             disabled={safeCurrent === 1}
             title="Primera página"
-            className="p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            className="p-2 sm:p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
           >
             <ChevronsLeft className="w-3.5 h-3.5" />
           </button>
@@ -78,7 +78,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             onClick={() => onPageChange(safeCurrent - 1)}
             disabled={safeCurrent === 1}
             title="Página anterior"
-            className="p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            className="p-2 sm:p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
@@ -102,7 +102,7 @@ export const Pagination: React.FC<PaginationProps> = ({
                   key={pageNum}
                   type="button"
                   onClick={() => onPageChange(pageNum)}
-                  className={`min-w-7 h-7 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                  className={`min-w-8 h-8 px-2 rounded-lg text-xs font-bold transition-all ${
                     isActive
                       ? 'bg-white text-black shadow-sm'
                       : 'bg-black text-neutral-400 hover:text-white hover:bg-neutral-900 border border-neutral-800'
@@ -120,7 +120,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             onClick={() => onPageChange(safeCurrent + 1)}
             disabled={safeCurrent === totalPages}
             title="Página siguiente"
-            className="p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            className="p-2 sm:p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -131,7 +131,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             onClick={() => onPageChange(totalPages)}
             disabled={safeCurrent === totalPages}
             title="Última página"
-            className="p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            className="p-2 sm:p-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
           >
             <ChevronsRight className="w-3.5 h-3.5" />
           </button>
