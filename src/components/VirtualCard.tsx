@@ -24,13 +24,13 @@ interface VirtualCardProps {
 
 export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showActions = true }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [loadingAction, setLoadingAction] = useState<'download' | 'share' | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const statusInfo = getCalculatedStatus(member.fecha_vencimiento, member.estado_pago);
 
   useEffect(() => {
     QRCode.toDataURL(member.codigo_qr, {
-      width: 320,
+      width: 480,
       margin: 1,
       color: {
         dark: '#000000',
@@ -41,69 +41,117 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
       .catch((err) => console.error('Error generating QR:', err));
   }, [member.codigo_qr]);
 
-  const handleDownload = async () => {
-    if (!cardRef.current || isDownloading) return;
+  const getCarnetFileName = (): string => {
+    const rawName = `${member.nombre || ''} ${member.apellido || ''}`.trim();
+    const slug = rawName
+      ? rawName
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+      : 'socio';
+    return `carnet-${slug || 'socio'}.jpg`;
+  };
 
-    setIsDownloading(true);
+  const generateJpg = async (): Promise<{ dataUrl: string; blob: Blob; fileName: string } | null> => {
+    if (!cardRef.current) return null;
+
+    const exportOptions = {
+      quality: 0.95,
+      pixelRatio: 3,
+      backgroundColor: '#0a0a0a',
+      cacheBust: true,
+      filter: (node: Node) => {
+        if (node instanceof Element && node.getAttribute('data-export-hide') === 'true') {
+          return false;
+        }
+        return true;
+      },
+    };
+
+    let dataUrl: string;
     try {
-      const exportOptions = {
-        quality: 0.95,
-        pixelRatio: 2,
-        backgroundColor: '#0a0a0a',
-        cacheBust: true,
-        filter: (node: Node) => {
-          if (node instanceof Element && node.getAttribute('data-export-hide') === 'true') {
-            return false;
-          }
-          return true;
-        },
-      };
+      dataUrl = await toJpeg(cardRef.current, exportOptions);
+    } catch (err) {
+      console.warn('Reintentando captura con skipFonts:', err);
+      dataUrl = await toJpeg(cardRef.current, {
+        ...exportOptions,
+        skipFonts: true,
+      });
+    }
 
-      let dataUrl: string;
-      try {
-        dataUrl = await toJpeg(cardRef.current, exportOptions);
-      } catch (err) {
-        console.warn('Reintentando captura con skipFonts:', err);
-        dataUrl = await toJpeg(cardRef.current, {
-          ...exportOptions,
-          skipFonts: true,
-        });
-      }
+    const fileName = getCarnetFileName();
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
 
-      const cleanLastName = (member.apellido || 'Socio')
-        .trim()
-        .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_');
-      const cleanDni = (member.dni || member.id.slice(0, 8)).trim();
-      const fileName = `Carnet_${cleanLastName}_${cleanDni}.jpg`;
+    return { dataUrl, blob, fileName };
+  };
 
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const triggerDownload = (dataUrl: string, fileName: string) => {
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownload = async () => {
+    if (!cardRef.current || loadingAction) return;
+
+    setLoadingAction('download');
+    try {
+      const result = await generateJpg();
+      if (!result) return;
+      triggerDownload(result.dataUrl, result.fileName);
     } catch (error) {
       console.error('Error al generar el carnet en JPG:', error);
       alert('Hubo un inconveniente al generar la imagen del carnet. Por favor intentá nuevamente.');
     } finally {
-      setIsDownloading(false);
+      setLoadingAction(null);
     }
   };
 
   const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Carnet Ringo - ${member.nombre} ${member.apellido}`,
-          text: `Carnet Ringo Gym | Socio: ${member.nombre} ${member.apellido} | DNI: ${member.dni} | Disciplina: ${member.disciplina}`,
-          url: window.location.href,
-        });
-      } catch (e) {
-        console.debug('Share dismissed');
+    if (!cardRef.current || loadingAction) return;
+
+    setLoadingAction('share');
+    try {
+      const result = await generateJpg();
+      if (!result) return;
+
+      const file = new File([result.blob], result.fileName, { type: 'image/jpeg' });
+      const memberFullName = `${member.nombre || ''} ${member.apellido || ''}`.trim() || 'Socio';
+
+      const canShareFiles =
+        typeof navigator !== 'undefined' &&
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [file] });
+
+      if (canShareFiles) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Carnet Ringo - ${memberFullName}`,
+            text: `Carnet digital Ringo Gym: ${memberFullName}`,
+          });
+        } catch (shareErr: unknown) {
+          if (shareErr instanceof Error && shareErr.name === 'AbortError') {
+            return;
+          }
+          console.warn('Fallo navigator.share, ejecutando fallback de descarga:', shareErr);
+          triggerDownload(result.dataUrl, result.fileName);
+        }
+      } else {
+        triggerDownload(result.dataUrl, result.fileName);
       }
-    } else {
-      navigator.clipboard.writeText(`Ringo Carnet: ${member.nombre} ${member.apellido} (DNI: ${member.dni})`);
-      alert('Información del carnet copiada al portapapeles');
+    } catch (error) {
+      console.error('Error al compartir el carnet:', error);
+      alert('Hubo un inconveniente al procesar el carnet. Por favor intentá nuevamente.');
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -260,11 +308,12 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
       {showActions && (
         <div className="flex items-center gap-2 mt-3 w-full justify-center no-print">
           <button
+            type="button"
             onClick={handleDownload}
-            disabled={!qrDataUrl || isDownloading}
-            className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            disabled={!qrDataUrl || !!loadingAction}
+            className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
           >
-            {isDownloading ? (
+            {loadingAction === 'download' ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Generando JPG...</span>
@@ -272,7 +321,26 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
             ) : (
               <>
                 <Download className="w-3.5 h-3.5" />
-                <span>Descargar Carnet (JPG)</span>
+                <span>Descargar JPG</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={!qrDataUrl || !!loadingAction}
+            className="flex-1 py-2.5 px-3 bg-white hover:bg-neutral-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-black text-xs font-bold rounded-xl border border-white transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            {loadingAction === 'share' ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                <span>Compartiendo...</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-black" />
+                <span>Compartir</span>
               </>
             )}
           </button>

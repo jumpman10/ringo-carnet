@@ -6,7 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { db, initDatabase } from './db.js';
+import selfsigned from 'selfsigned';
+import qrcodeTerminal from 'qrcode-terminal';
+import { db, initDatabase, DB_PATH } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,39 +85,83 @@ function getDaysRemaining(expirationDateStr) {
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
-function getLocalIpAddresses() {
-  const interfaces = os.networkInterfaces();
-  const addresses = [];
-  for (const name of Object.keys(interfaces)) {
-    for (const net of interfaces[name] || []) {
-      if (net.family === 'IPv4' && !net.internal) {
-        addresses.push(net.address);
-      }
+const CERTS_DIR = path.join(__dirname, 'certs');
+const CERT_FILE = path.join(CERTS_DIR, 'cert.pem');
+const KEY_FILE = path.join(CERTS_DIR, 'key.pem');
+
+async function getOrCreateCertificates(localIps = []) {
+  if (!fs.existsSync(CERTS_DIR)) {
+    fs.mkdirSync(CERTS_DIR, { recursive: true });
+  }
+
+  if (fs.existsSync(CERT_FILE) && fs.existsSync(KEY_FILE)) {
+    try {
+      const cert = fs.readFileSync(CERT_FILE, 'utf8');
+      const key = fs.readFileSync(KEY_FILE, 'utf8');
+      return { cert, key, isNew: false, location: CERTS_DIR };
+    } catch (err) {
+      console.warn('⚠️  No se pudieron leer los certificados existentes. Regenerando...', err);
     }
   }
-  return addresses;
-}
 
-function loadCertificates() {
-  const locations = [
-    { cert: path.join(ROOT_DIR, 'cert.pem'), key: path.join(ROOT_DIR, 'key.pem') },
-    { cert: path.join(__dirname, 'cert.pem'), key: path.join(__dirname, 'key.pem') },
+  console.log('🔐 Certificados SSL no encontrados. Generando certificados autofirmados con selfsigned...');
+
+  const altNames = [
+    { type: 2, value: 'localhost' },
+    { type: 7, ip: '127.0.0.1' },
+    ...localIps.map((ip) => ({ type: 7, ip })),
   ];
 
-  for (const loc of locations) {
-    if (fs.existsSync(loc.cert) && fs.existsSync(loc.key)) {
-      try {
-        return {
-          cert: fs.readFileSync(loc.cert),
-          key: fs.readFileSync(loc.key),
-          location: loc.cert,
-        };
-      } catch (err) {
-        console.error('Failed reading certificates from:', loc.cert, err);
+  const attrs = [
+    { name: 'commonName', value: 'localhost' },
+    { name: 'organizationName', value: 'Ringo Carnet' },
+  ];
+
+  const pems = await selfsigned.generate(attrs, {
+    days: 365,
+    keySize: 2048,
+    algorithm: 'sha256',
+    extensions: [{ name: 'subjectAltName', altNames }],
+  });
+
+  fs.writeFileSync(CERT_FILE, pems.cert, 'utf8');
+  fs.writeFileSync(KEY_FILE, pems.private, 'utf8');
+
+  console.log('✅ Certificados SSL creados exitosamente en server/certs/');
+  return {
+    cert: pems.cert,
+    key: pems.private,
+    isNew: true,
+    location: CERTS_DIR,
+  };
+}
+
+function getNetworkIpInfo() {
+  const interfaces = os.networkInterfaces();
+  const candidates = [];
+
+  for (const [name, netList] of Object.entries(interfaces)) {
+    for (const net of netList || []) {
+      const isIpv4 = net.family === 'IPv4' || net.family === 4;
+      if (isIpv4 && !net.internal) {
+        if (net.address.startsWith('169.254.')) continue;
+        const isWifi = /wi-?fi|wlan|en0|wireless/i.test(name);
+        candidates.push({
+          interface: name,
+          ip: net.address,
+          isWifi,
+        });
       }
     }
   }
-  return null;
+
+  // Prioritize Wi-Fi interfaces first
+  candidates.sort((a, b) => (b.isWifi ? 1 : 0) - (a.isWifi ? 1 : 0));
+
+  const primaryIp = candidates[0]?.ip || '127.0.0.1';
+  const allIps = candidates.map((c) => c.ip);
+
+  return { primaryIp, allIps, candidates };
 }
 
 // ----------------------------------------------------
@@ -777,44 +823,40 @@ if (fs.existsSync(DIST_DIR)) {
 }
 
 // ----------------------------------------------------
-// Server Startup (HTTPS / HTTP) & Local IP Banner
+// Server Startup (HTTPS) & Local Network QR
 // ----------------------------------------------------
-const sslCertificates = loadCertificates();
-const isHttps = Boolean(sslCertificates);
-const protocol = isHttps ? 'https' : 'http';
+const { primaryIp, allIps } = getNetworkIpInfo();
+const ssl = await getOrCreateCertificates(allIps);
 
-const server = isHttps
-  ? https.createServer({ key: sslCertificates.key, cert: sslCertificates.cert }, app)
-  : http.createServer(app);
+const server = https.createServer({ key: ssl.key, cert: ssl.cert }, app);
 
 server.listen(PORT, '0.0.0.0', () => {
-  const localIps = getLocalIpAddresses();
+  const localUrl = `https://localhost:${PORT}`;
+  const networkUrl = `https://${primaryIp}:${PORT}`;
 
   console.log('\n=============================================================');
-  console.log(`  🥊  RINGO CARNET - LOCAL SERVER RUNNING (${protocol.toUpperCase()})`);
+  console.log('  🥊  RINGO CARNET - SERVIDOR LOCAL HTTPS EN EJECUCIÓN');
   console.log('=============================================================');
-  console.log(`  • Local:      ${protocol}://localhost:${PORT}`);
+  console.log(`  💻  Acceso en esta PC:       ${localUrl}`);
+  console.log(`  📱  Acceso en Red Wi-Fi:     ${networkUrl}`);
+  console.log(`  💾  Base de datos SQLite:    ${path.relative(ROOT_DIR, DB_PATH)}`);
+  console.log(`  🔒  Certificados SSL:        ${path.relative(ROOT_DIR, CERTS_DIR)}`);
+  console.log(`  📁  Archivos web:            ${fs.existsSync(DIST_DIR) ? 'Sirviendo dist/' : 'dist/ no encontrado (ejecutá npm run build:prod)'}`);
+  console.log('-------------------------------------------------------------');
+  console.log('  📲  Escaneá este código QR desde tu celular (conectado al Wi-Fi):');
 
-  if (localIps.length > 0) {
-    console.log(`\n  📱  Open from your mobile phone on the same Wi-Fi:`);
-    for (const ip of localIps) {
-      console.log(`      👉  ${protocol}://${ip}:${PORT}`);
-    }
-  }
+  qrcodeTerminal.generate(networkUrl, { small: true }, (qr) => {
+    const indented = qr
+      .split('\n')
+      .map((line) => '      ' + line)
+      .join('\n');
+    console.log(indented);
+  });
 
-  console.log(`\n  📁  Static files: ${fs.existsSync(DIST_DIR) ? 'Serving dist/' : 'dist/ not found (run npm run build)'}`);
-  console.log(`  💾  Database:     SQLite WAL mode (server/ringo.db)`);
-
-  if (!isHttps) {
-    console.log('\n  ⚠️   RUNNING IN HTTP MODE:');
-    console.log('      Mobile browsers restrict camera access (QR Scanner) without HTTPS.');
-    console.log('      To enable HTTPS on your local network:');
-    console.log('      1. Run: npx mkcert create-ca && npx mkcert create-cert');
-    console.log('      2. Rename or copy output to cert.pem and key.pem in project root.');
-    console.log('      3. Restart this server.');
-  } else {
-    console.log(`  🔒  SSL Active: Loaded from ${sslCertificates.location}`);
-  }
-
+  console.log('\n  💡  Tip para celulares (Chrome / Safari):');
+  console.log('      Al ser un certificado local, la primera vez el navegador dirá:');
+  console.log('      "La conexión no es privada". Tocá "Configuración avanzada"');
+  console.log('      y luego "Continuar a ' + primaryIp + ' (no seguro)".');
+  console.log('      ¡Esto habilita la cámara para escanear y sacar fotos!');
   console.log('=============================================================\n');
 });

@@ -1,11 +1,29 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DB_PATH = path.join(__dirname, 'ringo.db');
+// Data directory for clean persistence & USB backups
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+export const DB_PATH = path.join(DATA_DIR, 'gimnasio.db');
+
+// Automatic migration from legacy ringo.db if gimnasio.db doesn't exist yet
+const LEGACY_DB_PATH = path.join(__dirname, 'ringo.db');
+if (!fs.existsSync(DB_PATH) && fs.existsSync(LEGACY_DB_PATH)) {
+  try {
+    fs.copyFileSync(LEGACY_DB_PATH, DB_PATH);
+    console.log('📦 Base de datos previa migrada a server/data/gimnasio.db');
+  } catch (err) {
+    console.error('Error al copiar base de datos anterior:', err);
+  }
+}
 
 export const db = new Database(DB_PATH);
 
