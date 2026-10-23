@@ -26,12 +26,19 @@ interface RenewMemberModalProps {
   onConfirmRenew: (memberId: string, options: RenewMemberOptions) => Promise<void>;
 }
 
-type SinglePaymentMethod = 'Efectivo' | 'Transferencia' | 'Tarjeta de crédito';
+type SinglePaymentMethod =
+  | 'Efectivo'
+  | 'Transferencia'
+  | 'Tarjeta de débito'
+  | 'Tarjeta de crédito'
+  | 'Pago con QR';
 
 const PAYMENT_METHODS: { id: SinglePaymentMethod; label: string }[] = [
   { id: 'Efectivo', label: 'Efectivo' },
   { id: 'Transferencia', label: 'Transferencia' },
-  { id: 'Tarjeta de crédito', label: 'Tarjeta' },
+  { id: 'Tarjeta de débito', label: 'Débito' },
+  { id: 'Tarjeta de crédito', label: 'Crédito' },
+  { id: 'Pago con QR', label: 'Pago QR' },
 ];
 
 export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
@@ -57,7 +64,9 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
   // Mixed breakdown
   const [montoEfectivo, setMontoEfectivo] = useState<number>(0);
   const [montoTransferencia, setMontoTransferencia] = useState<number>(0);
-  const [montoTarjeta, setMontoTarjeta] = useState<number>(0);
+  const [montoDebito, setMontoDebito] = useState<number>(0);
+  const [montoCredito, setMontoCredito] = useState<number>(0);
+  const [montoQr, setMontoQr] = useState<number>(0);
   
   const [notas, setNotas] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -88,7 +97,9 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
       );
       setMontoEfectivo(feeAmount);
       setMontoTransferencia(0);
-      setMontoTarjeta(0);
+      setMontoDebito(0);
+      setMontoCredito(0);
+      setMontoQr(0);
       setNotas('');
 
       // Calculate expiration
@@ -107,12 +118,16 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
       setMontoAbonado(deuda);
       setMontoEfectivo(deuda);
       setMontoTransferencia(0);
-      setMontoTarjeta(0);
+      setMontoDebito(0);
+      setMontoCredito(0);
+      setMontoQr(0);
     } else {
       setMontoAbonado(precioDisciplina);
       setMontoEfectivo(precioDisciplina);
       setMontoTransferencia(0);
-      setMontoTarjeta(0);
+      setMontoDebito(0);
+      setMontoCredito(0);
+      setMontoQr(0);
     }
   };
 
@@ -136,7 +151,9 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
         setMontoAbonado(found.precio);
         setMontoEfectivo(found.precio);
         setMontoTransferencia(0);
-        setMontoTarjeta(0);
+        setMontoDebito(0);
+        setMontoCredito(0);
+        setMontoQr(0);
       }
     }
   };
@@ -149,14 +166,22 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
       const mitad = Math.floor(montoAbonado / 2);
       setMontoEfectivo(mitad);
       setMontoTransferencia(montoAbonado - mitad);
-      setMontoTarjeta(0);
+      setMontoDebito(0);
+      setMontoCredito(0);
+      setMontoQr(0);
     }
   };
 
   // Mixed totals and validation
   const sumaDesglose = useMemo(() => {
-    return Number(montoEfectivo || 0) + Number(montoTransferencia || 0) + Number(montoTarjeta || 0);
-  }, [montoEfectivo, montoTransferencia, montoTarjeta]);
+    return (
+      Number(montoEfectivo || 0) +
+      Number(montoTransferencia || 0) +
+      Number(montoDebito || 0) +
+      Number(montoCredito || 0) +
+      Number(montoQr || 0)
+    );
+  }, [montoEfectivo, montoTransferencia, montoDebito, montoCredito, montoQr]);
 
   const diferenciaDesglose = montoAbonado - sumaDesglose;
   const desgloseValido = !esMixto || diferenciaDesglose === 0;
@@ -174,14 +199,20 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
   const esPagoParcial = modoCobro === 'renovacion' && montoAbonado < precioDisciplina;
 
   // Auto-fill remainder button for mixed methods
-  const autoCompletarResto = (metodoDestino: 'Efectivo' | 'Transferencia' | 'Tarjeta') => {
+  const autoCompletarResto = (
+    metodoDestino: 'Efectivo' | 'Transferencia' | 'Tarjeta de débito' | 'Tarjeta de crédito' | 'Pago con QR'
+  ) => {
     const restante = montoAbonado - sumaDesglose;
     if (metodoDestino === 'Efectivo') {
       setMontoEfectivo(Math.max(0, montoEfectivo + restante));
     } else if (metodoDestino === 'Transferencia') {
       setMontoTransferencia(Math.max(0, montoTransferencia + restante));
-    } else {
-      setMontoTarjeta(Math.max(0, montoTarjeta + restante));
+    } else if (metodoDestino === 'Tarjeta de débito') {
+      setMontoDebito(Math.max(0, montoDebito + restante));
+    } else if (metodoDestino === 'Tarjeta de crédito') {
+      setMontoCredito(Math.max(0, montoCredito + restante));
+    } else if (metodoDestino === 'Pago con QR') {
+      setMontoQr(Math.max(0, montoQr + restante));
     }
   };
 
@@ -206,7 +237,9 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
       if (esMixto) {
         if (montoEfectivo > 0) detallesList.push({ metodo: 'Efectivo', monto: montoEfectivo });
         if (montoTransferencia > 0) detallesList.push({ metodo: 'Transferencia', monto: montoTransferencia });
-        if (montoTarjeta > 0) detallesList.push({ metodo: 'Tarjeta de crédito', monto: montoTarjeta });
+        if (montoDebito > 0) detallesList.push({ metodo: 'Tarjeta de débito', monto: montoDebito });
+        if (montoCredito > 0) detallesList.push({ metodo: 'Tarjeta de crédito', monto: montoCredito });
+        if (montoQr > 0) detallesList.push({ metodo: 'Pago con QR', monto: montoQr });
 
         const nombresMetodos = detallesList.map(d => d.metodo).join(' + ');
         metodoFinal = detallesList.length > 1 ? `Mixto (${nombresMetodos})` : (detallesList[0]?.metodo || 'Mixto');
@@ -514,7 +547,7 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
 
               {/* OPCIÓN A: MÉTODO ÚNICO */}
               {!esMixto && (
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                   {PAYMENT_METHODS.map((pm) => {
                     const isSelected = metodoSimple === pm.id;
                     return (
@@ -597,24 +630,76 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Tarjeta de Crédito / Débito */}
+                  {/* Tarjeta de Débito */}
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-neutral-200 w-28">💳 Tarjeta</span>
+                    <span className="text-xs font-bold text-neutral-200 w-28">💳 T. Débito</span>
                     <div className="flex items-center gap-1 flex-1">
                       <input
                         type="number"
                         min="0"
                         step="100"
-                        value={montoTarjeta || ''}
-                        onChange={(e) => setMontoTarjeta(Number(e.target.value) || 0)}
+                        value={montoDebito || ''}
+                        onChange={(e) => setMontoDebito(Number(e.target.value) || 0)}
                         placeholder="0"
                         className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
                       />
                       {diferenciaDesglose !== 0 && (
                         <button
                           type="button"
-                          onClick={() => autoCompletarResto('Tarjeta')}
-                          title="Asignar el saldo restante a Tarjeta"
+                          onClick={() => autoCompletarResto('Tarjeta de débito')}
+                          title="Asignar el saldo restante a Débito"
+                          className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
+                        >
+                          Resto
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tarjeta de Crédito */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-neutral-200 w-28">💳 T. Crédito</span>
+                    <div className="flex items-center gap-1 flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={montoCredito || ''}
+                        onChange={(e) => setMontoCredito(Number(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
+                      />
+                      {diferenciaDesglose !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => autoCompletarResto('Tarjeta de crédito')}
+                          title="Asignar el saldo restante a Crédito"
+                          className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
+                        >
+                          Resto
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pago con QR */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-neutral-200 w-28">📲 Pago QR</span>
+                    <div className="flex items-center gap-1 flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={montoQr || ''}
+                        onChange={(e) => setMontoQr(Number(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
+                      />
+                      {diferenciaDesglose !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => autoCompletarResto('Pago con QR')}
+                          title="Asignar el saldo restante a Pago QR"
                           className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
                         >
                           Resto

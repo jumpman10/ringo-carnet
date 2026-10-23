@@ -42,11 +42,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="font-black text-base sm:text-lg tracking-wider text-white uppercase leading-none">
                 RINGO
               </span>
-              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-300 border border-neutral-700 leading-none">
+              <span className="text-[11px] sm:text-xs font-mono uppercase px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 border border-neutral-700 leading-none">
                 {isAdminRoute ? 'ADMIN' : 'CARNET'}
               </span>
             </div>
-            <p className="text-[10px] text-neutral-400 truncate mt-0.5 hidden xs:block">
+            <p className="text-xs text-neutral-400 truncate mt-0.5 hidden xs:block">
               {isAdminRoute ? 'Gestión Administrativa' : 'Portal de Socios'}
             </p>
           </div>

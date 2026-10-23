@@ -85,11 +85,11 @@ export function getCalculatedStatus(
 ): { membershipStatus: MembershipStatus; daysRemaining: number; label: string; color: string } {
   const daysRemaining = getDaysRemaining(expirationDateStr);
 
-  if (paymentStatus === 'pendiente' || paymentStatus === 'vencido' || daysRemaining < 0) {
+  if (paymentStatus === 'pendiente' || paymentStatus === 'saldo' || paymentStatus === 'vencido' || daysRemaining < 0) {
     return {
       membershipStatus: 'vencido',
       daysRemaining,
-      label: daysRemaining < 0 ? `Vencido hace ${Math.abs(daysRemaining)} días` : 'Vencido / Pago pendiente',
+      label: daysRemaining < 0 ? `Vencido hace ${Math.abs(daysRemaining)} días` : 'Vencido / Saldo pendiente',
       color: 'bg-black text-neutral-400 border border-neutral-800',
     };
   }

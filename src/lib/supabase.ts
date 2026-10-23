@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS public.miembros (
     dni TEXT UNIQUE NOT NULL,
     nombre TEXT NOT NULL,
     apellido TEXT NOT NULL,
+    fecha_nacimiento DATE,
     foto_url TEXT,
     disciplina TEXT NOT NULL,
     telefono TEXT NOT NULL,
