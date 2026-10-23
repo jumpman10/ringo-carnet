@@ -1,5 +1,5 @@
 import React from 'react';
-import { User } from '../lib/supabase';
+import { User } from '../types';
 import {
   LogOut,
   Shield,

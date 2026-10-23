@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Member, AccessLog, PaymentLog, DisciplineItem, RenewMemberOptions } from './types';
+import { Member, AccessLog, PaymentLog, DisciplineItem, RenewMemberOptions, User } from './types';
 import {
   fetchMembers,
   createMember,
@@ -13,7 +13,7 @@ import {
   fetchPaymentLogs,
   fetchDisciplines,
 } from './lib/storage';
-import { getStoredSupabaseConfig, getSupabase, signOutAdmin, User } from './lib/supabase';
+import { signOutAdmin, getCurrentAdminUser } from './lib/auth';
 import { getDaysRemaining } from './lib/dateUtils';
 import { Navbar } from './components/Navbar';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -40,13 +40,12 @@ export default function App() {
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isExpiringModalOpen, setIsExpiringModalOpen] = useState(false);
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [selectedCardMember, setSelectedCardMember] = useState<Member | null>(null);
 
   // User role state (regular members on /)
   const [currentUserDni, setCurrentUserDni] = useState<string | null>(null);
-  const [supabaseConfigured, setSupabaseConfigured] = useState(false);
 
   // Router listener for HTML5 history
   useEffect(() => {
@@ -78,9 +77,6 @@ export default function App() {
       setAccessLogs(accs);
       setPaymentLogs(pays);
       setDisciplines(discs);
-
-      const config = getStoredSupabaseConfig();
-      setSupabaseConfigured(config.isConfigured);
     } catch (err) {
       console.error('Error loading data', err);
     } finally {
@@ -90,21 +86,9 @@ export default function App() {
 
   useEffect(() => {
     loadData();
-
-    // Initialize Supabase Auth state listener
-    const supabase = getSupabase();
-    if (supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setAdminUser(session?.user ?? null);
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setAdminUser(session?.user ?? null);
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
+    const storedAdmin = getCurrentAdminUser();
+    if (storedAdmin) {
+      setAdminUser(storedAdmin);
     }
   }, []);
 
@@ -197,7 +181,7 @@ export default function App() {
             <AdminLoginPage
               onLoginSuccess={(user) => setAdminUser(user)}
               onNavigateHome={() => navigate('/')}
-              onOpenSupabaseConfig={() => setIsSupabaseModalOpen(true)}
+              onOpenSupabaseConfig={() => setIsServerModalOpen(true)}
             />
           )
         ) : (
@@ -270,13 +254,13 @@ export default function App() {
         </>
       )}
 
-      {/* Supabase Configuration Modal */}
+      {/* Server Status Modal */}
       <SupabaseConfigModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
+        isOpen={isServerModalOpen}
+        onClose={() => setIsServerModalOpen(false)}
         onConfigSaved={() => {
           loadData();
-          setIsSupabaseModalOpen(false);
+          setIsServerModalOpen(false);
         }}
       />
     </div>

@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+server/*.db*
+*.pem
+
