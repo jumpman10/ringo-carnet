@@ -32,6 +32,7 @@ export function exportMembersToExcel(members: Member[], suffix = '') {
       Apellido: m.apellido,
       Nombre: m.nombre,
       DNI: m.dni,
+      'Fecha Nacimiento': m.fecha_nacimiento ? formatDisplayDate(m.fecha_nacimiento) : '-',
       Teléfono: m.telefono,
       Disciplina: m.disciplina,
       'Monto Mensual ($)': m.monto_mensual || 25000,
@@ -39,7 +40,7 @@ export function exportMembersToExcel(members: Member[], suffix = '') {
       'Fecha Vencimiento': formatDisplayDate(m.fecha_vencimiento),
       'Días Restantes': days,
       'Estado Membresía': status.membershipStatus.toUpperCase(),
-      'Estado Pago': m.estado_pago ? m.estado_pago.toUpperCase() : 'PENDIENTE',
+      'Estado Pago': m.estado_pago === 'pendiente' || m.estado_pago === 'saldo' ? 'SALDO' : (m.estado_pago ? m.estado_pago.toUpperCase() : 'SALDO'),
       'Método de Pago': m.metodo_pago || 'Efectivo',
     };
   });
@@ -50,6 +51,7 @@ export function exportMembersToExcel(members: Member[], suffix = '') {
     { wch: 18 },
     { wch: 18 },
     { wch: 14 },
+    { wch: 18 },
     { wch: 16 },
     { wch: 18 },
     { wch: 18 },
@@ -152,7 +154,7 @@ export function exportCriticalMembersToExcel(members: Member[], filterLabel = 't
       Vencimiento: formatDisplayDate(m.fecha_vencimiento),
       'Días Restantes':
         days < 0 ? `${Math.abs(days)}d vencido` : days === 0 ? 'Vence hoy' : `${days} días`,
-      'Estado Pago': m.estado_pago ? m.estado_pago.toUpperCase() : 'PENDIENTE',
+      'Estado Pago': m.estado_pago === 'pendiente' || m.estado_pago === 'saldo' ? 'SALDO' : (m.estado_pago ? m.estado_pago.toUpperCase() : 'SALDO'),
       'Monto Cuota ($)': m.monto_mensual || 25000,
     };
   });

@@ -153,6 +153,7 @@ export const MemberPortal: React.FC<MemberPortalProps> = ({
             </h3>
             <p className="text-[10px] text-neutral-400 font-mono">
               {currentMember.disciplina} • DNI: {currentMember.dni}
+              {currentMember.fecha_nacimiento && ` • Nac: ${formatDisplayDate(currentMember.fecha_nacimiento)}`}
             </p>
           </div>
         </div>

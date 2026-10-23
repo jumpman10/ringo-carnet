@@ -279,8 +279,8 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                               ? matchedMember.estado_pago === 'parcial'
                                 ? `Membresía activa • Saldo pendiente: $${(matchedMember.saldo_pendiente || 0).toLocaleString('es-AR')}`
                                 : 'Membresía al día • Adelante'
-                              : matchedMember.estado_pago === 'pendiente'
-                                ? 'Cuota pendiente de pago'
+                              : (matchedMember.estado_pago === 'pendiente' || matchedMember.estado_pago === 'saldo')
+                                ? 'Cuota con saldo pendiente de pago'
                                 : 'Membresía mensual vencida'}
                           </p>
                         </div>

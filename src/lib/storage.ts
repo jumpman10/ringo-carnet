@@ -1,4 +1,4 @@
-import { Member, AccessLog, PaymentLog, Discipline, DisciplineItem, PaymentMethod, PaymentMethodDetail, RenewMemberOptions } from '../types';
+import { Member, AccessLog, PaymentLog, Discipline, DisciplineItem, PaymentMethod, PaymentMethodDetail, RenewMemberOptions, PaymentStatus } from '../types';
 import { calculateNextExpiration, formatDateISO } from './dateUtils';
 import { getSupabase } from './supabase';
 
@@ -179,8 +179,8 @@ export async function createMember(memberData: Omit<Member, 'id' | 'codigo_qr' |
     try {
       const { metodo_pago, ...dbMember } = newMember;
       let { error } = await supabase.from('miembros').insert([dbMember]);
-      if (error && (error.message?.includes('saldo_pendiente') || error.code === '42703')) {
-        const { saldo_pendiente, ...safeMember } = dbMember;
+      if (error && (error.message?.includes('saldo_pendiente') || error.message?.includes('fecha_nacimiento') || error.code === '42703')) {
+        const { saldo_pendiente, fecha_nacimiento, ...safeMember } = dbMember;
         const retry = await supabase.from('miembros').insert([safeMember]);
         error = retry.error;
       }
@@ -244,8 +244,8 @@ export async function updateMember(
       const { metodo_pago, ...dbUpdates } = updates;
       if (Object.keys(dbUpdates).length > 0) {
         let { error } = await supabase.from('miembros').update(dbUpdates).eq('id', id);
-        if (error && (error.message?.includes('saldo_pendiente') || error.code === '42703')) {
-          const { saldo_pendiente, ...safeUpdates } = dbUpdates;
+        if (error && (error.message?.includes('saldo_pendiente') || error.message?.includes('fecha_nacimiento') || error.code === '42703')) {
+          const { saldo_pendiente, fecha_nacimiento, ...safeUpdates } = dbUpdates;
           const retry = await supabase.from('miembros').update(safeUpdates).eq('id', id);
           error = retry.error;
         }

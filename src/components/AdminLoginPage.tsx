@@ -140,7 +140,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1">
+            <label className="block text-xs font-bold text-neutral-300 uppercase font-mono mb-1.5">
               Correo Electrónico
             </label>
             <div className="relative">
@@ -151,13 +151,13 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@ringogym.com"
-                className="w-full bg-black border border-neutral-800 rounded-lg pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                className="w-full bg-black border border-neutral-800 rounded-lg pl-9 pr-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1">
+            <label className="block text-xs font-bold text-neutral-300 uppercase font-mono mb-1.5">
               Contraseña
             </label>
             <div className="relative">
@@ -169,7 +169,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 minLength={6}
-                className="w-full bg-black border border-neutral-800 rounded-lg pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
+                className="w-full bg-black border border-neutral-800 rounded-lg pl-9 pr-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
               />
             </div>
           </div>
@@ -177,7 +177,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
           <button
             type="submit"
             disabled={loading || !isConfigured}
-            className="w-full py-3 px-4 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white active:scale-95 text-black font-black text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white active:scale-95 text-black font-black text-xs sm:text-sm uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
