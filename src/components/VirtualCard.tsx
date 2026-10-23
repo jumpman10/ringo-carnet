@@ -3,11 +3,13 @@ import QRCode from 'qrcode';
 import { toJpeg } from 'html-to-image';
 import { Member } from '../types';
 import { getCalculatedStatus, formatDisplayDate } from '../lib/dateUtils';
+import logoImg from '../assets/logo.jpg';
 import {
   Download,
   Share2,
   Calendar,
   Phone,
+  MapPin,
   Dumbbell,
   Check,
   AlertCircle,
@@ -167,39 +169,45 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
         className="w-full bg-[#0a0a0a] rounded-2xl p-4 sm:p-5 border border-white/20 shadow-2xl relative overflow-hidden text-white"
       >
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-black text-base">
-              R
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-black text-sm tracking-widest text-white uppercase">RINGO GYM</span>
-                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-300 border border-neutral-700">
-                  PASS
-                </span>
-              </div>
-              <p className="text-[10px] text-neutral-400 tracking-wider uppercase">Socio Digital</p>
-            </div>
-          </div>
-
-          {/* Status Badge - Monochrome */}
-          <div data-export-hide="true" className="flex items-center">
+        <div className="relative border-b border-neutral-800 pb-3 mb-4">
+          {/* Status Badge - Export Hidden */}
+          <div data-export-hide="true" className="absolute top-0 right-0 z-10">
             {statusInfo.membershipStatus === 'activo' ? (
-              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-black border border-white flex items-center gap-1">
+              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-black border border-white flex items-center gap-1 shadow-sm">
                 <Check className="w-3 h-3 stroke-[3]" />
                 AL DÍA
               </span>
             ) : statusInfo.membershipStatus === 'por_vencer' ? (
-              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-neutral-900 text-white border border-neutral-400 flex items-center gap-1">
+              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-neutral-900 text-white border border-neutral-400 flex items-center gap-1 shadow-sm">
                 <AlertCircle className="w-3 h-3" />
                 POR VENCER
               </span>
             ) : (
-              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-black text-neutral-400 border border-neutral-800 line-through">
+              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-black text-neutral-400 border border-neutral-800 line-through shadow-sm">
                 VENCIDO
               </span>
             )}
+          </div>
+
+          {/* Centered Brand Header */}
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="bg-[#f7f7f7] rounded-xl px-3 py-1.5 shadow-sm inline-flex items-center justify-center">
+              <img
+                src={logoImg}
+                alt="Ringo Gym Logo"
+                className="h-12 sm:h-14 w-auto object-contain"
+              />
+            </div>
+            <div className="mt-2.5 flex flex-col items-center gap-0.5 text-center">
+              <span className="flex items-center gap-1.5 text-xs text-neutral-300 font-mono tracking-wide">
+                <Phone className="w-3 h-3 text-neutral-400" />
+                +543813424213
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-neutral-400 font-medium tracking-wide">
+                <MapPin className="w-3 h-3 text-neutral-400" />
+                Marcos Paz 419
+              </span>
+            </div>
           </div>
         </div>
 
