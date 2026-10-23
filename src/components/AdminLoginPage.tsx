@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { signInAdmin, signUpAdmin, getStoredSupabaseConfig, User } from '../lib/supabase';
-import { Shield, Lock, Mail, KeyRound, AlertCircle, CheckCircle2, RefreshCw, Database, ArrowLeft } from 'lucide-react';
+import { signInAdmin, signUpAdmin, User } from '../lib/auth';
+import { Shield, Lock, Mail, KeyRound, AlertCircle, CheckCircle2, RefreshCw, ArrowLeft } from 'lucide-react';
 
 interface AdminLoginPageProps {
   onLoginSuccess: (user: User) => void;
   onNavigateHome: () => void;
-  onOpenSupabaseConfig: () => void;
+  onOpenSupabaseConfig?: () => void;
 }
 
 export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   onLoginSuccess,
   onNavigateHome,
-  onOpenSupabaseConfig,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,8 +18,6 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  const { isConfigured } = getStoredSupabaseConfig();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,11 +41,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
           throw error;
         }
         if (data.user) {
-          if (data.session) {
-            onLoginSuccess(data.user);
-          } else {
-            setSuccessMsg('Usuario creado exitosamente. Si la confirmación por email está activada en Supabase, revisa tu casilla.');
-          }
+          onLoginSuccess(data.user);
         }
       } else {
         const { data, error } = await signInAdmin(trimmedEmail, trimmedPass);
@@ -61,11 +54,9 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
       }
     } catch (err: any) {
       console.error('Error de autenticación:', err);
-      let message = err.message || 'Error al autenticar con Supabase.';
+      let message = err.message || 'Error al autenticar.';
       if (message.includes('Invalid login credentials')) {
         message = 'Credenciales inválidas. Verifica tu correo y contraseña.';
-      } else if (message.includes('Email not confirmed')) {
-        message = 'El correo electrónico aún no ha sido confirmado en Supabase.';
       } else if (message.includes('Password should be at least')) {
         message = 'La contraseña debe tener al menos 6 caracteres.';
       }
@@ -97,30 +88,9 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
             {isSignUp ? 'Crear Administrador' : 'Panel de Administración'}
           </h2>
           <p className="text-xs text-neutral-400 font-mono">
-            Acceso exclusivo del personal vía Supabase Auth
+            Acceso exclusivo del personal del gimnasio
           </p>
         </div>
-
-        {/* Supabase connection warning */}
-        {!isConfigured && (
-          <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 text-neutral-300 text-xs space-y-2 font-mono">
-            <div className="flex items-center gap-2 text-white font-bold">
-              <AlertCircle className="w-4 h-4 text-white" />
-              <span>Base de datos no configurada</span>
-            </div>
-            <p className="text-neutral-400 text-[11px]">
-              Se requiere conectar Supabase para autenticar al administrador.
-            </p>
-            <button
-              type="button"
-              onClick={onOpenSupabaseConfig}
-              className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded border border-neutral-700 text-[11px] flex items-center gap-1.5"
-            >
-              <Database className="w-3.5 h-3.5" />
-              Configurar Supabase ahora
-            </button>
-          </div>
-        )}
 
         {/* Error / Success messages */}
         {errorMsg && (
@@ -168,7 +138,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                minLength={6}
+                minLength={4}
                 className="w-full bg-black border border-neutral-800 rounded-lg pl-9 pr-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
               />
             </div>
@@ -176,8 +146,8 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
           <button
             type="submit"
-            disabled={loading || !isConfigured}
-            className="w-full py-3 px-4 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white active:scale-95 text-black font-black text-xs sm:text-sm uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full py-3 px-4 bg-white hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white active:scale-95 text-black font-black text-xs sm:text-sm uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? (
               <RefreshCw className="w-4 h-4 animate-spin" />

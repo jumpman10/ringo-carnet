@@ -1,102 +1,75 @@
 import React, { useState, useEffect } from 'react';
-import {
-  getStoredSupabaseConfig,
-  saveStoredSupabaseConfig,
-  clearStoredSupabaseConfig,
-  testSupabaseConnection,
-  resetSupabaseClient,
-  SUPABASE_SQL_SCRIPT
-} from '../lib/supabase';
-import { X, Database, Check, Copy, RefreshCw, Shield } from 'lucide-react';
+import { X, Server, CheckCircle2, AlertCircle, RefreshCw, Smartphone, Database, Shield } from 'lucide-react';
 
 interface SupabaseConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfigSaved: () => void;
+  onConfigSaved?: () => void;
 }
 
 export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
   isOpen,
   onClose,
-  onConfigSaved,
 }) => {
-  const [url, setUrl] = useState('');
-  const [anonKey, setAnonKey] = useState('');
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [copiedSql, setCopiedSql] = useState(false);
-  const [showSql, setShowSql] = useState(false);
+  const [serverStatus, setServerStatus] = useState<{
+    connected: boolean;
+    serverTime?: string;
+    protocol?: string;
+    error?: string;
+  } | null>(null);
+
+  const checkServerStatus = async () => {
+    setTesting(true);
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        const data = await res.json();
+        setServerStatus({
+          connected: true,
+          serverTime: data.serverTime,
+          protocol: window.location.protocol.replace(':', ''),
+        });
+      } else {
+        setServerStatus({
+          connected: false,
+          error: `Respuesta del servidor: HTTP ${res.status}`,
+        });
+      }
+    } catch (err: any) {
+      setServerStatus({
+        connected: false,
+        error: 'No se pudo conectar a /api/health. Asegúrate de iniciar "npm run server".',
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
-      const config = getStoredSupabaseConfig();
-      setUrl(config.url);
-      setAnonKey(config.anonKey);
-      setTestResult(null);
+      checkServerStatus();
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleTestAndSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url.trim() || !anonKey.trim()) {
-      alert('Ingresa la URL y la Anon Key de tu proyecto Supabase.');
-      return;
-    }
-
-    setTesting(true);
-    setTestResult(null);
-
-    const result = await testSupabaseConnection(url.trim(), anonKey.trim());
-    setTestResult(result);
-    setTesting(false);
-
-    if (result.success) {
-      saveStoredSupabaseConfig(url.trim(), anonKey.trim());
-      resetSupabaseClient();
-      onConfigSaved();
-    }
-  };
-
-  const handleDisconnect = () => {
-    clearStoredSupabaseConfig();
-    resetSupabaseClient();
-    setUrl('');
-    setAnonKey('');
-    setTestResult(null);
-    onConfigSaved();
-  };
-
-  const copySql = () => {
-    navigator.clipboard.writeText(SUPABASE_SQL_SCRIPT);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
-  };
-
-  const config = getStoredSupabaseConfig();
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-sm">
-      <div className="min-h-full flex items-center justify-center p-2.5 sm:p-4">
-        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl relative my-auto flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
-          {/* Header - B&W */}
-          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black shrink-0">
+      <div className="min-h-full flex items-center justify-center p-3 sm:p-4">
+        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative my-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-black">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold">
-                <Database className="w-4 h-4" />
+                <Server className="w-4 h-4" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-black text-sm sm:text-base text-white uppercase tracking-wider">
-                    Configurar Supabase
-                  </h3>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-neutral-900 text-white border border-neutral-700">
-                    {config.isConfigured ? 'Conectado' : 'Local'}
-                  </span>
-                </div>
+                <h3 className="font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                  Servidor Local SQLite
+                </h3>
                 <p className="text-[11px] text-neutral-400 font-mono">
-                  PostgreSQL & Autenticación de Socios
+                  Base de datos local independiente (Node.js + Express)
                 </p>
               </div>
             </div>
@@ -109,102 +82,100 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
           </div>
 
           {/* Body */}
-          <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 text-xs">
-          <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-800 text-neutral-300 space-y-1 font-mono text-[11px]">
-            <p>1. Ingresa la URL y anon public key de tu proyecto Supabase.</p>
-            <p>2. Ejecuta el script SQL en el editor de Supabase para crear las tablas.</p>
-          </div>
-
-          <form onSubmit={handleTestAndSave} className="space-y-3">
-            <div>
-              <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1">
-                Project URL
-              </label>
-              <input
-                type="url"
-                required
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://xyz.supabase.co"
-                className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1">
-                Anon Public Key
-              </label>
-              <textarea
-                rows={2}
-                required
-                value={anonKey}
-                onChange={(e) => setAnonKey(e.target.value)}
-                placeholder="eyJhbGci..."
-                className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white font-mono"
-              />
-            </div>
-
-            {testResult && (
-              <div className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-white font-mono text-[11px]">
-                {testResult.message}
+          <div className="p-4 sm:p-5 space-y-4">
+            {/* Status card */}
+            <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono text-neutral-400">Estado de Conexión:</span>
+                {testing ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-mono text-neutral-400">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Verificando...
+                  </span>
+                ) : serverStatus?.connected ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-mono text-emerald-400 font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Conectado a /api
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-mono text-amber-400 font-bold">
+                    <AlertCircle className="w-3.5 h-3.5" /> Desconectado
+                  </span>
+                )}
               </div>
-            )}
 
-            <div className="flex items-center justify-between pt-2">
-              {config.isConfigured && (
-                <button
-                  type="button"
-                  onClick={handleDisconnect}
-                  className="text-neutral-500 hover:text-white underline font-mono text-[11px]"
-                >
-                  Desconectar
-                </button>
+              {serverStatus?.error && (
+                <p className="text-[11px] text-amber-300 font-mono bg-amber-950/30 p-2 rounded border border-amber-800/40">
+                  {serverStatus.error}
+                </p>
               )}
+
+              {serverStatus?.connected && (
+                <div className="pt-2 border-t border-neutral-900 grid grid-cols-2 gap-2 text-[11px] font-mono text-neutral-400">
+                  <div>
+                    <span className="text-neutral-500">Motor:</span> SQLite WAL
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Protocolo:</span> {serverStatus.protocol?.toUpperCase()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Local Server Details */}
+            <div className="space-y-2 text-xs font-mono text-neutral-300">
+              <div className="flex items-start gap-2 p-3 bg-neutral-900/60 rounded-lg border border-neutral-800">
+                <Database className="w-4 h-4 text-white shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-white">Almacenamiento Local (server/ringo.db)</p>
+                  <p className="text-[11px] text-neutral-400 mt-0.5">
+                    Todos los socios, pagos, disciplinas y accesos se guardan en tu base de datos SQLite local de forma permanente.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-neutral-900/60 rounded-lg border border-neutral-800">
+                <Smartphone className="w-4 h-4 text-white shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-white">Acceso Móvil por Wi-Fi</p>
+                  <p className="text-[11px] text-neutral-400 mt-0.5">
+                    Al ejecutar <code>npm run server</code> se muestra la IP local de tu máquina para abrir el sistema desde el celular.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-neutral-900/60 rounded-lg border border-neutral-800">
+                <Shield className="w-4 h-4 text-white shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-white">Cámara y Escáner QR (HTTPS)</p>
+                  <p className="text-[11px] text-neutral-400 mt-0.5">
+                    Para usar la cámara del celular en red local, colocá tus certificados <code>cert.pem</code> y <code>key.pem</code> en la raíz del proyecto.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-2 flex items-center justify-between gap-3">
               <button
-                type="submit"
+                type="button"
+                onClick={checkServerStatus}
                 disabled={testing}
-                className="ml-auto px-4 py-2 bg-white text-black font-black uppercase text-xs rounded-lg active:scale-95 transition-all flex items-center gap-1.5"
+                className="px-3 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg border border-neutral-700 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
               >
-                {testing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
-                Probar y Conectar
+                <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
+                <span>Reintentar Conexión</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 bg-white hover:bg-neutral-200 text-black rounded-lg text-xs font-bold font-mono uppercase tracking-wider transition-all cursor-pointer"
+              >
+                Entendido
               </button>
             </div>
-          </form>
-
-          {/* SQL Section */}
-          <div className="pt-3 border-t border-neutral-900">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-white uppercase font-mono">
-                Script SQL de Tablas
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setShowSql(!showSql)}
-                  className="text-neutral-400 hover:text-white font-mono text-[11px]"
-                >
-                  {showSql ? 'Ocultar' : 'Ver'}
-                </button>
-                <button
-                  type="button"
-                  onClick={copySql}
-                  className="px-2 py-0.5 bg-neutral-900 text-white text-[11px] rounded border border-neutral-800 flex items-center gap-1 font-mono"
-                >
-                  {copiedSql ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3" />}
-                  {copiedSql ? 'Copiado' : 'Copiar'}
-                </button>
-              </div>
-            </div>
-
-            {showSql && (
-              <pre className="bg-black border border-neutral-900 rounded-lg p-2.5 text-[10px] font-mono text-neutral-400 max-h-40 overflow-auto">
-                {SUPABASE_SQL_SCRIPT}
-              </pre>
-            )}
           </div>
         </div>
       </div>
     </div>
-  </div>
   );
 };
