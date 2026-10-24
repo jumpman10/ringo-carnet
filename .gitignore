@@ -15,4 +15,8 @@ server/data/*.db*
 server/certs/*.pem
 server/certs/
 *.pem
+bin/
+dist-server/
+data/
+certs/
 

@@ -3,19 +3,24 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/main.js",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
+    "postinstall": "electron-builder install-app-deps",
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "build:prod": "vite build",
+    "build:bin": "node scripts/build-bin.js",
     "preview": "vite preview",
     "server": "node server/server.js",
     "start": "node server/server.js",
     "start:local": "cross-env NODE_ENV=production node server/server.js",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "clean": "rm -rf dist bin dist-server",
+    "lint": "tsc --noEmit",
+    "electron:dev": "vite build && electron .",
+    "electron:build": "vite build && electron-builder"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -33,6 +38,7 @@
     "motion": "^12.23.24",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "selfsigned": "^5.5.0",
@@ -48,9 +54,54 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@yao-pkg/pkg": "^5.13.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^33.4.11",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
+  },
+  "bin": "dist-server/server.cjs",
+  "pkg": {
+    "assets": [
+      "dist/**/*"
+    ],
+    "targets": [
+      "node18-macos-arm64",
+      "node18-win-x64"
+    ],
+    "outputPath": "bin"
+  },
+  "build": {
+    "appId": "com.ringoclub.carnet",
+    "productName": "Ringo Carnet",
+    "files": [
+      "dist/**/*",
+      "server/**/*",
+      "electron/**/*",
+      "package.json",
+      "!server/data/**/*",
+      "!server/certs/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }

@@ -3,29 +3,71 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const isPkg = typeof process.pkg !== 'undefined';
+const __filename = typeof __filename !== 'undefined'
+  ? __filename
+  : fileURLToPath(import.meta.url);
+const __dirname = typeof __dirname !== 'undefined'
+  ? __dirname
+  : path.dirname(__filename);
 
-// Data directory for clean persistence & USB backups
-const DATA_DIR = path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Base directory: directory containing the executable when packaged, or project root in development
+const BASE_DIR = isPkg
+  ? path.dirname(process.execPath)
+  : (fs.existsSync(path.join(process.cwd(), 'package.json'))
+      ? process.cwd()
+      : path.resolve(__dirname, '..'));
+
+// Data directory: prioritize custom data directory (e.g. Electron userData) then default local directory
+export const dataDir = process.env.RINGO_DATA_DIR || path.join(__dirname, 'data');
+export const DATA_DIR = dataDir;
+
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
 }
 
-export const DB_PATH = path.join(DATA_DIR, 'gimnasio.db');
+export const dbPath = path.join(dataDir, 'gimnasio.db');
+export const DB_PATH = dbPath;
 
-// Automatic migration from legacy ringo.db if gimnasio.db doesn't exist yet
-const LEGACY_DB_PATH = path.join(__dirname, 'ringo.db');
-if (!fs.existsSync(DB_PATH) && fs.existsSync(LEGACY_DB_PATH)) {
-  try {
-    fs.copyFileSync(LEGACY_DB_PATH, DB_PATH);
-    console.log('📦 Base de datos previa migrada a server/data/gimnasio.db');
-  } catch (err) {
-    console.error('Error al copiar base de datos anterior:', err);
+// Automatic migration from legacy paths if gimnasio.db doesn't exist yet
+if (!fs.existsSync(dbPath)) {
+  const legacyCandidates = [
+    path.join(__dirname, 'data', 'gimnasio.db'),
+    path.join(BASE_DIR, 'data', 'gimnasio.db'),
+    path.join(BASE_DIR, 'server', 'data', 'gimnasio.db'),
+    path.join(BASE_DIR, 'server', 'ringo.db'),
+    path.join(BASE_DIR, 'ringo.db'),
+  ];
+  for (const legacyPath of legacyCandidates) {
+    if (fs.existsSync(legacyPath) && path.resolve(legacyPath) !== path.resolve(dbPath)) {
+      try {
+        fs.copyFileSync(legacyPath, dbPath);
+        console.log(`📦 Base de datos previa migrada desde ${legacyPath} a ${dbPath}`);
+        break;
+      } catch (err) {
+        console.error('Error al migrar base de datos anterior:', err);
+      }
+    }
   }
 }
 
-export const db = new Database(DB_PATH);
+// Locate native binary addon when packaged with pkg
+const dbOptions = {};
+if (isPkg) {
+  const possibleAddonPaths = [
+    path.join(BASE_DIR, 'better_sqlite3.node'),
+    path.join(BASE_DIR, 'Release', 'better_sqlite3.node'),
+    path.join(BASE_DIR, 'build', 'Release', 'better_sqlite3.node'),
+  ];
+  for (const addonPath of possibleAddonPaths) {
+    if (fs.existsSync(addonPath)) {
+      dbOptions.nativeBinding = addonPath;
+      break;
+    }
+  }
+}
+
+export const db = new Database(dbPath, dbOptions);
 
 // High-performance concurrency settings
 db.pragma('journal_mode = WAL');

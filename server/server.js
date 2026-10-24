@@ -5,16 +5,47 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import selfsigned from 'selfsigned';
 import qrcodeTerminal from 'qrcode-terminal';
-import { db, initDatabase, DB_PATH } from './db.js';
+import { db, initDatabase, dbPath, DB_PATH } from './db.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ROOT_DIR = path.resolve(__dirname, '..');
-const DIST_DIR = path.join(ROOT_DIR, 'dist');
-const PORT = process.env.PORT || 3000;
+const isPkg = typeof process.pkg !== 'undefined';
+const __filename = typeof __filename !== 'undefined'
+  ? __filename
+  : fileURLToPath(import.meta.url);
+const __dirname = typeof __dirname !== 'undefined'
+  ? __dirname
+  : path.dirname(__filename);
+
+// Base directory: directory of the binary if packaged, or project root in development
+const BASE_DIR = isPkg
+  ? path.dirname(process.execPath)
+  : (fs.existsSync(path.join(process.cwd(), 'package.json'))
+      ? process.cwd()
+      : path.resolve(__dirname, '..'));
+
+// Static assets resolution (prioritizes physical dist/ next to executable, then fallback)
+function resolveDistDir() {
+  const candidates = [
+    path.join(BASE_DIR, 'dist'),
+    path.join(process.cwd(), 'dist'),
+    path.join(__dirname, '..', 'dist'),
+    path.join(__dirname, 'dist'),
+  ];
+  for (const candidate of candidates) {
+    const resolved = path.resolve(candidate);
+    if (fs.existsSync(resolved) && fs.existsSync(path.join(resolved, 'index.html'))) {
+      return resolved;
+    }
+  }
+  return path.resolve(BASE_DIR, 'dist');
+}
+
+const DIST_DIR = resolveDistDir();
+let currentPort = Number(process.env.PORT) || 3000;
+export const PORT = currentPort;
 
 // Initialize database schema and initial seeds
 initDatabase();
@@ -85,20 +116,23 @@ function getDaysRemaining(expirationDateStr) {
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
-const CERTS_DIR = path.join(__dirname, 'certs');
-const CERT_FILE = path.join(CERTS_DIR, 'cert.pem');
-const KEY_FILE = path.join(CERTS_DIR, 'key.pem');
+export const certsDir = process.env.RINGO_DATA_DIR
+  ? path.join(process.env.RINGO_DATA_DIR, 'certs')
+  : path.join(__dirname, 'certs');
+const CERTS_DIR = certsDir;
+const CERT_FILE = path.join(certsDir, 'cert.pem');
+const KEY_FILE = path.join(certsDir, 'key.pem');
 
 async function getOrCreateCertificates(localIps = []) {
-  if (!fs.existsSync(CERTS_DIR)) {
-    fs.mkdirSync(CERTS_DIR, { recursive: true });
+  if (!fs.existsSync(certsDir)) {
+    fs.mkdirSync(certsDir, { recursive: true });
   }
 
   if (fs.existsSync(CERT_FILE) && fs.existsSync(KEY_FILE)) {
     try {
       const cert = fs.readFileSync(CERT_FILE, 'utf8');
       const key = fs.readFileSync(KEY_FILE, 'utf8');
-      return { cert, key, isNew: false, location: CERTS_DIR };
+      return { cert, key, isNew: false, location: certsDir };
     } catch (err) {
       console.warn('⚠️  No se pudieron leer los certificados existentes. Regenerando...', err);
     }
@@ -127,12 +161,12 @@ async function getOrCreateCertificates(localIps = []) {
   fs.writeFileSync(CERT_FILE, pems.cert, 'utf8');
   fs.writeFileSync(KEY_FILE, pems.private, 'utf8');
 
-  console.log('✅ Certificados SSL creados exitosamente en server/certs/');
+  console.log(`✅ Certificados SSL creados exitosamente en ${certsDir}`);
   return {
     cert: pems.cert,
     key: pems.private,
     isNew: true,
-    location: CERTS_DIR,
+    location: certsDir,
   };
 }
 
@@ -164,11 +198,49 @@ function getNetworkIpInfo() {
   return { primaryIp, allIps, candidates };
 }
 
+export function getLocalIp() {
+  const { primaryIp } = getNetworkIpInfo();
+  return primaryIp;
+}
+
 // ----------------------------------------------------
-// Healthcheck
+// Healthcheck & Network Info
 // ----------------------------------------------------
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', serverTime: new Date().toISOString() });
+});
+
+app.get('/api/network-info', (req, res) => {
+  const ip = getLocalIp();
+  const port = currentPort;
+  res.json({
+    ip: ip,
+    port: port,
+    url: 'https://' + ip + ':' + port,
+  });
+});
+
+app.get('/api/backup', (req, res) => {
+  try {
+    if (!fs.existsSync(dbPath)) {
+      return res.status(404).json({ error: 'Base de datos no encontrada' });
+    }
+
+    // Flush WAL journal to main database file before download
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch {
+      // Proceed even if WAL checkpoint warning occurs
+    }
+
+    res.download(dbPath, 'gimnasio-backup.db', (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ error: 'Error al descargar el backup de la base de datos' });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ----------------------------------------------------
@@ -798,13 +870,14 @@ app.post('/api/payments', (req, res) => {
 // ----------------------------------------------------
 // Static Files Serving (Vite build in dist/)
 // ----------------------------------------------------
-if (fs.existsSync(DIST_DIR)) {
+const indexHtmlPath = path.resolve(DIST_DIR, 'index.html');
+if (fs.existsSync(DIST_DIR) && fs.existsSync(indexHtmlPath)) {
   app.use(express.static(DIST_DIR));
 
   // SPA fallback for HTML5 History API client-side routes (e.g. /admin, /carnet/:dni)
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
-    res.sendFile(path.join(DIST_DIR, 'index.html'));
+    res.sendFile(indexHtmlPath);
   });
 } else {
   app.get('/', (req, res) => {
@@ -815,7 +888,7 @@ if (fs.existsSync(DIST_DIR)) {
         <body style="font-family: sans-serif; background: #000; color: #fff; padding: 40px; text-align: center;">
           <h1 style="font-size: 2.5rem; margin-bottom: 8px;">🏋️ Ringo Server</h1>
           <p style="color: #aaa;">Backend API & SQLite are running.</p>
-          <p style="color: #666; font-size: 0.9rem;">To serve the frontend app, run <code>npm run build</code> to generate the <code>dist/</code> folder.</p>
+          <p style="color: #666; font-size: 0.9rem;">dist/ no encontrado. Ejecutá <code>npm run build</code> para compilar el frontend.</p>
         </body>
       </html>
     `);
@@ -823,40 +896,93 @@ if (fs.existsSync(DIST_DIR)) {
 }
 
 // ----------------------------------------------------
+// Browser Auto-open (Cross-platform)
+// ----------------------------------------------------
+function openBrowser(url) {
+  const startCmd = process.platform === 'darwin'
+    ? `open "${url}"`
+    : process.platform === 'win32'
+    ? `start "" "${url}"`
+    : `xdg-open "${url}"`;
+
+  exec(startCmd, (err) => {
+    if (err) {
+      console.warn('⚠️  No se pudo abrir el navegador automáticamente:', err.message);
+    }
+  });
+}
+
+// ----------------------------------------------------
 // Server Startup (HTTPS) & Local Network QR
 // ----------------------------------------------------
-const { primaryIp, allIps } = getNetworkIpInfo();
-const ssl = await getOrCreateCertificates(allIps);
+export async function startServer(customPort = 3000) {
+  const portToUse = Number(customPort) || Number(process.env.PORT) || 3000;
+  currentPort = portToUse;
 
-const server = https.createServer({ key: ssl.key, cert: ssl.cert }, app);
+  const { primaryIp, allIps } = getNetworkIpInfo();
+  const ssl = await getOrCreateCertificates(allIps);
 
-server.listen(PORT, '0.0.0.0', () => {
-  const localUrl = `https://localhost:${PORT}`;
-  const networkUrl = `https://${primaryIp}:${PORT}`;
+  const server = https.createServer({ key: ssl.key, cert: ssl.cert }, app);
 
-  console.log('\n=============================================================');
-  console.log('  🥊  RINGO CARNET - SERVIDOR LOCAL HTTPS EN EJECUCIÓN');
-  console.log('=============================================================');
-  console.log(`  💻  Acceso en esta PC:       ${localUrl}`);
-  console.log(`  📱  Acceso en Red Wi-Fi:     ${networkUrl}`);
-  console.log(`  💾  Base de datos SQLite:    ${path.relative(ROOT_DIR, DB_PATH)}`);
-  console.log(`  🔒  Certificados SSL:        ${path.relative(ROOT_DIR, CERTS_DIR)}`);
-  console.log(`  📁  Archivos web:            ${fs.existsSync(DIST_DIR) ? 'Sirviendo dist/' : 'dist/ no encontrado (ejecutá npm run build:prod)'}`);
-  console.log('-------------------------------------------------------------');
-  console.log('  📲  Escaneá este código QR desde tu celular (conectado al Wi-Fi):');
+  return new Promise((resolve, reject) => {
+    server.on('error', (err) => {
+      reject(err);
+    });
 
-  qrcodeTerminal.generate(networkUrl, { small: true }, (qr) => {
-    const indented = qr
-      .split('\n')
-      .map((line) => '      ' + line)
-      .join('\n');
-    console.log(indented);
+    server.listen(portToUse, '0.0.0.0', () => {
+      const localUrl = `https://localhost:${portToUse}`;
+      const networkUrl = `https://${primaryIp}:${portToUse}`;
+
+      console.log('\n=============================================================');
+      console.log('  🥊  RINGO CARNET - SERVIDOR LOCAL HTTPS EN EJECUCIÓN');
+      console.log('=============================================================');
+      console.log(`  💻  Acceso en esta PC:       ${localUrl}`);
+      console.log(`  📱  Acceso en Red Wi-Fi:     ${networkUrl}`);
+      console.log(`  💾  Base de datos SQLite:    ${dbPath}`);
+      console.log(`  🔒  Certificados SSL:        ${certsDir}`);
+      console.log(`  📁  Archivos web:            ${fs.existsSync(indexHtmlPath) ? `Sirviendo dist/` : 'dist/ no encontrado (ejecutá npm run build)'}`);
+      console.log('-------------------------------------------------------------');
+      console.log('  📲  Escaneá este código QR desde tu celular (conectado al Wi-Fi):');
+
+      qrcodeTerminal.generate(networkUrl, { small: true }, (qr) => {
+        const indented = qr
+          .split('\n')
+          .map((line) => '      ' + line)
+          .join('\n');
+        console.log(indented);
+      });
+
+      console.log('\n  💡  Tip para celulares (Chrome / Safari):');
+      console.log('      Al ser un certificado local, la primera vez el navegador dirá:');
+      console.log('      "La conexión no es privada". Tocá "Configuración avanzada"');
+      console.log('      y luego "Continuar a ' + primaryIp + ' (no seguro)".');
+      console.log('      ¡Esto habilita la cámara para escanear y sacar fotos!');
+      console.log('=============================================================\n');
+
+      // Solo ejecuta la apertura automática del navegador si NO estamos dentro de Electron
+      if (!process.versions?.electron) {
+        setTimeout(() => {
+          openBrowser(localUrl);
+        }, 600);
+      }
+
+      resolve({ server, ip: primaryIp, port: portToUse });
+    });
   });
+}
 
-  console.log('\n  💡  Tip para celulares (Chrome / Safari):');
-  console.log('      Al ser un certificado local, la primera vez el navegador dirá:');
-  console.log('      "La conexión no es privada". Tocá "Configuración avanzada"');
-  console.log('      y luego "Continuar a ' + primaryIp + ' (no seguro)".');
-  console.log('      ¡Esto habilita la cámara para escanear y sacar fotos!');
-  console.log('=============================================================\n');
-});
+// Automatically start when executed directly via Node CLI or packaged binary
+const isDirectRun = process.argv[1] && (
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]) ||
+  (isPkg && !process.versions?.electron)
+);
+
+if (isDirectRun) {
+  startServer().catch((err) => {
+    console.error('❌ Error fatal al iniciar el servidor:', err);
+    process.exit(1);
+  });
+}
+
+export { app };
+export default app;
