@@ -19,6 +19,7 @@ import { QrScannerModal } from './components/QrScannerModal';
 import { ExpiringListModal } from './components/ExpiringListModal';
 import { VirtualCardModal } from './components/VirtualCardModal';
 import { DisciplineConfigModal } from './components/DisciplineConfigModal';
+import { NetworkModal } from './components/NetworkModal';
 
 export default function App() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -33,6 +34,7 @@ export default function App() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isExpiringModalOpen, setIsExpiringModalOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isNetworkModalOpen, setIsNetworkModalOpen] = useState(false);
   const [selectedCardMember, setSelectedCardMember] = useState<Member | null>(null);
 
   // Normalize path if accessed via /admin or legacy route
@@ -99,6 +101,7 @@ export default function App() {
       <Navbar
         onOpenConfigModal={() => setIsConfigModalOpen(true)}
         onOpenScanner={() => setIsScannerOpen(true)}
+        onOpenNetworkModal={() => setIsNetworkModalOpen(true)}
       />
 
       {/* Main Body */}
@@ -187,6 +190,12 @@ export default function App() {
           const updated = await fetchDisciplines();
           setDisciplines(updated);
         }}
+      />
+
+      {/* 6. Network & Backup Modal */}
+      <NetworkModal
+        isOpen={isNetworkModalOpen}
+        onClose={() => setIsNetworkModalOpen(false)}
       />
     </div>
   );
