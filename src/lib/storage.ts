@@ -1,6 +1,12 @@
-import { Member, AccessLog, PaymentLog, Discipline, DisciplineItem, PaymentMethod, PaymentMethodDetail, RenewMemberOptions, PaymentStatus } from '../types';
+import {
+  Member,
+  AccessLog,
+  PaymentLog,
+  DisciplineItem,
+  RenewMemberOptions,
+  PaymentMethod,
+} from '../types';
 import { calculateNextExpiration, formatDateISO } from './dateUtils';
-import { getSupabase } from './supabase';
 
 const STORAGE_KEY_MEMBERS = 'ringo_gym_members';
 const STORAGE_KEY_ACCESS = 'ringo_gym_access_logs';
@@ -18,18 +24,65 @@ export const DEFAULT_DISCIPLINES: DisciplineItem[] = [
   { id: 'disc-8', nombre: 'Pase Libre', precio: 45000 },
 ];
 
-export async function fetchDisciplines(): Promise<DisciplineItem[]> {
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('disciplinas').select('*').order('nombre');
-      if (!error && data && data.length > 0) {
-        localStorage.setItem(STORAGE_KEY_DISCIPLINES, JSON.stringify(data));
-        return data as DisciplineItem[];
+/**
+ * Standard API fetch wrapper with user-friendly error translations
+ */
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = endpoint.startsWith('http') ? endpoint : `/api${endpoint}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    });
+
+    if (!res.ok) {
+      let errorMessage = `Error del servidor (${res.status})`;
+      try {
+        const body = await res.json();
+        if (body?.error) {
+          errorMessage = body.error;
+        }
+      } catch {
+        errorMessage = res.statusText || errorMessage;
       }
-    } catch (e) {
-      console.warn('Could not fetch disciplines from Supabase', e);
+
+      // Friendly translations for common errors
+      if (res.status === 409) {
+        errorMessage = 'Ya existe un socio registrado con este DNI.';
+      } else if (res.status === 404) {
+        errorMessage = 'El registro solicitado no fue encontrado.';
+      }
+
+      throw new Error(errorMessage);
     }
+
+    return (await res.json()) as T;
+  } catch (err: any) {
+    if (err.name === 'TypeError' && err.message?.toLowerCase().includes('fetch')) {
+      throw new Error(
+        'No se pudo conectar con el servidor local (/api). Verifica que esté corriendo con "npm run server".'
+      );
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------
+// Disciplines
+// ---------------------------------------------------------------------
+export async function fetchDisciplines(): Promise<DisciplineItem[]> {
+  try {
+    const data = await apiRequest<DisciplineItem[]>('/disciplines');
+    if (Array.isArray(data) && data.length > 0) {
+      localStorage.setItem(STORAGE_KEY_DISCIPLINES, JSON.stringify(data));
+      return data;
+    }
+  } catch (err) {
+    console.warn('API fetchDisciplines failed, falling back to local cache:', err);
   }
 
   const stored = localStorage.getItem(STORAGE_KEY_DISCIPLINES);
@@ -48,74 +101,60 @@ export async function fetchDisciplines(): Promise<DisciplineItem[]> {
   return DEFAULT_DISCIPLINES;
 }
 
-export async function saveDiscipline(item: Omit<DisciplineItem, 'id'> & { id?: string }): Promise<DisciplineItem> {
+export async function saveDiscipline(
+  item: Omit<DisciplineItem, 'id'> & { id?: string }
+): Promise<DisciplineItem> {
   const current = await fetchDisciplines();
   let savedItem: DisciplineItem;
 
-  if (item.id) {
-    savedItem = { id: item.id, nombre: item.nombre.trim(), precio: Number(item.precio) };
-    const index = current.findIndex(d => d.id === item.id);
-    if (index !== -1) {
-      current[index] = savedItem;
+  try {
+    if (item.id) {
+      savedItem = await apiRequest<DisciplineItem>(`/disciplines/${item.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(item),
+      });
     } else {
-      current.push(savedItem);
+      savedItem = await apiRequest<DisciplineItem>('/disciplines', {
+        method: 'POST',
+        body: JSON.stringify(item),
+      });
     }
-  } else {
+  } catch (err) {
+    console.warn('Could not save discipline to local API, saving locally:', err);
     savedItem = {
-      id: 'disc-' + Date.now().toString(36),
+      id: item.id || 'disc-' + Date.now().toString(36),
       nombre: item.nombre.trim(),
       precio: Number(item.precio),
     };
+  }
+
+  const index = current.findIndex((d) => d.id === savedItem.id);
+  if (index !== -1) {
+    current[index] = savedItem;
+  } else {
     current.push(savedItem);
   }
-
   localStorage.setItem(STORAGE_KEY_DISCIPLINES, JSON.stringify(current));
-
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      await supabase.from('disciplinas').upsert([savedItem]);
-    } catch (e) {
-      console.warn('Could not save discipline to Supabase', e);
-    }
-  }
 
   return savedItem;
 }
 
 export async function deleteDiscipline(id: string): Promise<boolean> {
-  const current = await fetchDisciplines();
-  const filtered = current.filter(d => d.id !== id);
-  localStorage.setItem(STORAGE_KEY_DISCIPLINES, JSON.stringify(filtered));
-
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      await supabase.from('disciplinas').delete().eq('id', id);
-    } catch (e) {
-      console.warn('Could not delete discipline from Supabase', e);
-    }
+  try {
+    await apiRequest(`/disciplines/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    console.warn('Could not delete discipline from local API:', err);
   }
 
+  const current = await fetchDisciplines();
+  const filtered = current.filter((d) => d.id !== id);
+  localStorage.setItem(STORAGE_KEY_DISCIPLINES, JSON.stringify(filtered));
   return true;
 }
 
-// Auto-purge legacy mock items from localStorage on initial load
-try {
-  const stored = localStorage.getItem(STORAGE_KEY_MEMBERS);
-  if (stored) {
-    const parsed = JSON.parse(stored);
-    if (Array.isArray(parsed)) {
-      const filtered = parsed.filter((m: any) => !['mem-1', 'mem-2', 'mem-3', 'mem-4', 'mem-5'].includes(m.id));
-      if (filtered.length !== parsed.length) {
-        localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(filtered));
-      }
-    }
-  }
-} catch {
-  // Ignore
-}
-
+// ---------------------------------------------------------------------
+// Members
+// ---------------------------------------------------------------------
 export function getLocalMembers(): Member[] {
   const stored = localStorage.getItem(STORAGE_KEY_MEMBERS);
   if (stored) {
@@ -131,163 +170,86 @@ export function getLocalMembers(): Member[] {
   return [];
 }
 
+export function saveLocalMembers(members: Member[]) {
+  localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members));
+}
+
 export async function fetchMembers(): Promise<Member[]> {
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('miembros').select('*').order('creado_en', { ascending: false });
-      if (!error && data) {
-        const localOnly = getLocalMembers().filter(m => !data.some(d => d.id === m.id || d.dni === m.dni));
-        const combined = [...data, ...localOnly];
-        localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(combined));
-        return combined as Member[];
-      }
-    } catch (err) {
-      console.warn('Supabase fetch failed, falling back to local storage', err);
+  try {
+    const data = await apiRequest<Member[]>('/members');
+    if (Array.isArray(data)) {
+      saveLocalMembers(data);
+      return data;
     }
+  } catch (err) {
+    console.warn('API fetchMembers failed, falling back to local cache:', err);
   }
 
   return getLocalMembers();
 }
 
-export function saveLocalMembers(members: Member[]) {
-  localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members));
-}
+export async function createMember(
+  memberData: Omit<Member, 'id' | 'codigo_qr' | 'creado_en' | 'fecha_vencimiento'> & {
+    fecha_vencimiento?: string;
+  }
+): Promise<Member> {
+  let createdMember: Member;
 
-export async function createMember(memberData: Omit<Member, 'id' | 'codigo_qr' | 'creado_en' | 'fecha_vencimiento'> & { fecha_vencimiento?: string }): Promise<Member> {
-  const id = 'mem-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-  const now = new Date();
-  
-  // Calculate expiration date automatically if not explicitly given
-  const calculatedVencimiento = memberData.fecha_vencimiento || calculateNextExpiration(memberData.fecha_ingreso);
-  const qrCode = `RINGO-${memberData.dni.trim()}-${Date.now().toString(36).toUpperCase()}`;
-  const isPagado = memberData.estado_pago === 'pagado';
-
-  const newMember: Member = {
-    ...memberData,
-    id,
-    fecha_vencimiento: calculatedVencimiento,
-    codigo_qr: qrCode,
-    creado_en: now.toISOString(),
-    ultimo_pago_fecha: isPagado ? memberData.fecha_ingreso : undefined,
-  };
-
-  // 1. Save to Supabase
-  // CRITICAL: Strip 'metodo_pago' because it belongs to the 'pagos' table, not 'miembros' table
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { metodo_pago, ...dbMember } = newMember;
-      let { error } = await supabase.from('miembros').insert([dbMember]);
-      if (error && (error.message?.includes('saldo_pendiente') || error.message?.includes('fecha_nacimiento') || error.code === '42703')) {
-        const { saldo_pendiente, fecha_nacimiento, ...safeMember } = dbMember;
-        const retry = await supabase.from('miembros').insert([safeMember]);
-        error = retry.error;
-      }
-      if (error) {
-        console.error('Error saving member to Supabase:', error);
-      }
-    } catch (err) {
-      console.warn('Error saving member to Supabase:', err);
-    }
+  try {
+    createdMember = await apiRequest<Member>('/members', {
+      method: 'POST',
+      body: JSON.stringify(memberData),
+    });
+  } catch (err) {
+    // If backend rejects (e.g. duplicate DNI or connection error), propagate readable error
+    throw err;
   }
 
-  // 2. Save local
   const current = getLocalMembers();
-  const updated = [newMember, ...current.filter(m => m.id !== id)];
+  const updated = [createdMember, ...current.filter((m) => m.id !== createdMember.id)];
   saveLocalMembers(updated);
 
-  // 3. If paid upon registration, register initial payment log automatically
-  if (isPagado) {
-    await logPayment({
-      member_id: id,
-      fecha: newMember.fecha_ingreso,
-      monto: Number(newMember.monto_mensual),
-      metodo: (memberData.metodo_pago as PaymentMethod) || 'Efectivo',
-      periodo_inicio: newMember.fecha_ingreso,
-      periodo_fin: calculatedVencimiento,
-    });
-  }
-
-  return newMember;
+  return createdMember;
 }
 
 export async function updateMember(
-  id: string, 
+  id: string,
   updates: Partial<Member>,
   options?: { skipPaymentLog?: boolean }
 ): Promise<Member | null> {
-  const current = await fetchMembers();
-  const index = current.findIndex(m => m.id === id);
-  if (index === -1) return null;
+  let updatedMember: Member;
 
-  const previousMember = current[index];
-
-  // Recalculate expiration if join date changed
-  let updatedData = { ...current[index], ...updates };
-  if (updates.fecha_ingreso && !updates.fecha_vencimiento) {
-    updatedData.fecha_vencimiento = calculateNextExpiration(updates.fecha_ingreso);
-  }
-
-  const becamePagado = updates.estado_pago === 'pagado' && previousMember.estado_pago !== 'pagado';
-  if (becamePagado && !updates.ultimo_pago_fecha) {
-    updatedData.ultimo_pago_fecha = formatDateISO(new Date());
-  }
-
-  current[index] = updatedData;
-  saveLocalMembers(current);
-
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      // Strip 'metodo_pago' from updates sent to 'miembros' table
-      const { metodo_pago, ...dbUpdates } = updates;
-      if (Object.keys(dbUpdates).length > 0) {
-        let { error } = await supabase.from('miembros').update(dbUpdates).eq('id', id);
-        if (error && (error.message?.includes('saldo_pendiente') || error.message?.includes('fecha_nacimiento') || error.code === '42703')) {
-          const { saldo_pendiente, fecha_nacimiento, ...safeUpdates } = dbUpdates;
-          const retry = await supabase.from('miembros').update(safeUpdates).eq('id', id);
-          error = retry.error;
-        }
-        if (error) {
-          console.error('Error updating member in Supabase:', error);
-        }
-      }
-    } catch (err) {
-      console.warn('Error updating member in Supabase:', err);
-    }
-  }
-
-  // If status changed to 'pagado' and not explicitly skipped (e.g. during renewMemberMembership)
-  if (becamePagado && !options?.skipPaymentLog) {
-    const today = formatDateISO(new Date());
-    await logPayment({
-      member_id: id,
-      fecha: today,
-      monto: Number(updatedData.monto_mensual) || 28000,
-      metodo: (updates.metodo_pago as PaymentMethod) || 'Efectivo',
-      periodo_inicio: today,
-      periodo_fin: updatedData.fecha_vencimiento,
+  try {
+    updatedMember = await apiRequest<Member>(`/members/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...updates, skipPaymentLog: options?.skipPaymentLog }),
     });
+  } catch (err) {
+    console.error('Error updating member on API:', err);
+    throw err;
   }
 
-  return updatedData;
+  const current = getLocalMembers();
+  const index = current.findIndex((m) => m.id === id);
+  if (index !== -1) {
+    current[index] = updatedMember;
+    saveLocalMembers(current);
+  }
+
+  return updatedMember;
 }
 
 export async function deleteMember(id: string): Promise<boolean> {
-  const current = await fetchMembers();
-  const filtered = current.filter(m => m.id !== id);
-  saveLocalMembers(filtered);
-
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      await supabase.from('miembros').delete().eq('id', id);
-    } catch (err) {
-      console.warn('Error deleting member in Supabase:', err);
-    }
+  try {
+    await apiRequest(`/members/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    console.error('Error deleting member on API:', err);
+    throw err;
   }
 
+  const current = getLocalMembers();
+  const filtered = current.filter((m) => m.id !== id);
+  saveLocalMembers(filtered);
   return true;
 }
 
@@ -301,149 +263,84 @@ export async function renewMemberMembership(
   legacyMetodo?: PaymentMethod
 ): Promise<Member | null>;
 export async function renewMemberMembership(
-  memberId: string, 
-  optionsOrMonto?: RenewMemberOptions | number, 
+  memberId: string,
+  optionsOrMonto?: RenewMemberOptions | number,
   legacyMetodo: PaymentMethod = 'Efectivo'
 ): Promise<Member | null> {
-  let monto: number | undefined;
-  let metodo: PaymentMethod | string = legacyMetodo;
-  let detalles: PaymentMethodDetail[] | undefined;
-  let disciplina: string | undefined;
-  let fechaRenovacion: string | undefined;
-  let fechaVencimiento: string | undefined;
-  let saldoPendiente: number | undefined;
-  let esPagoSaldo: boolean | undefined;
-  let notas: string | undefined;
+  let payload: RenewMemberOptions = {};
 
   if (typeof optionsOrMonto === 'number') {
-    monto = optionsOrMonto;
-    metodo = legacyMetodo;
+    payload = {
+      monto: optionsOrMonto,
+      metodo: legacyMetodo,
+    };
   } else if (typeof optionsOrMonto === 'object' && optionsOrMonto !== null) {
-    monto = optionsOrMonto.monto;
-    metodo = optionsOrMonto.metodo || 'Efectivo';
-    detalles = optionsOrMonto.detalles;
-    disciplina = optionsOrMonto.disciplina;
-    fechaRenovacion = optionsOrMonto.fechaRenovacion;
-    fechaVencimiento = optionsOrMonto.fechaVencimiento;
-    saldoPendiente = optionsOrMonto.saldoPendiente;
-    esPagoSaldo = optionsOrMonto.esPagoSaldo;
-    notas = optionsOrMonto.notas;
+    payload = optionsOrMonto;
   }
 
-  const current = await fetchMembers();
-  const member = current.find(m => m.id === memberId);
-  if (!member) return null;
-
-  const today = formatDateISO(new Date());
-  const renewalDate = fechaRenovacion || today;
-
-  // Case A: Paying off existing pending balance only
-  if (esPagoSaldo) {
-    const nuevoSaldo = Math.max(0, (member.saldo_pendiente || 0) - (monto || 0));
-    const updates: Partial<Member> = {
-      saldo_pendiente: nuevoSaldo,
-      estado_pago: nuevoSaldo === 0 ? 'pagado' : 'parcial',
-      ultimo_pago_fecha: renewalDate,
-    };
-    if (metodo) updates.metodo_pago = metodo as PaymentMethod;
-
-    const updated = await updateMember(memberId, updates, { skipPaymentLog: true });
-
-    await logPayment({
-      member_id: memberId,
-      fecha: renewalDate,
-      monto: monto || 0,
-      metodo: metodo as any,
-      periodo_inicio: member.fecha_ingreso,
-      periodo_fin: member.fecha_vencimiento,
-      detalles: detalles && detalles.length > 0 ? detalles : undefined,
-      notas: notas || `Cancelación de saldo pendiente (Restante: $${nuevoSaldo})`,
+  try {
+    const updated = await apiRequest<Member>(`/members/${memberId}/renew`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
 
+    const current = getLocalMembers();
+    const index = current.findIndex((m) => m.id === memberId);
+    if (index !== -1) {
+      current[index] = updated;
+      saveLocalMembers(current);
+    }
+
     return updated;
+  } catch (err) {
+    console.error('Error renewing member membership on API:', err);
+    throw err;
   }
-
-  // Case B: Membership renewal (full or partial)
-  const baseDate = member.fecha_vencimiento && member.fecha_vencimiento >= renewalDate
-    ? member.fecha_vencimiento
-    : renewalDate;
-
-  const newExpiration = fechaVencimiento || calculateNextExpiration(baseDate);
-
-  const nuevoSaldo = saldoPendiente !== undefined 
-    ? Math.max(0, saldoPendiente) 
-    : 0;
-
-  const nuevoEstadoPago: PaymentStatus = nuevoSaldo > 0 ? 'parcial' : 'pagado';
-
-  const updates: Partial<Member> = {
-    fecha_vencimiento: newExpiration,
-    estado_membresia: 'activo',
-    estado_pago: nuevoEstadoPago,
-    saldo_pendiente: nuevoSaldo,
-    ultimo_pago_fecha: renewalDate,
-  };
-
-  if (disciplina) {
-    updates.disciplina = disciplina;
-  }
-  if (monto !== undefined) {
-    updates.monto_mensual = monto;
-  }
-  if (metodo) {
-    updates.metodo_pago = metodo as PaymentMethod;
-  }
-
-  const updated = await updateMember(
-    memberId,
-    updates,
-    { skipPaymentLog: true }
-  );
-
-  // Log payment
-  await logPayment({
-    member_id: memberId,
-    fecha: renewalDate,
-    monto: monto !== undefined ? monto : (member.monto_mensual || 28000),
-    metodo: metodo as any,
-    periodo_inicio: baseDate,
-    periodo_fin: newExpiration,
-    detalles: detalles && detalles.length > 0 ? detalles : undefined,
-    notas: notas || (nuevoSaldo > 0 ? `Pago parcial (Saldo pendiente: $${nuevoSaldo})` : undefined),
-  });
-
-  return updated;
 }
 
+// ---------------------------------------------------------------------
+// Access Verification (QR Scanner) & Access Logs
+// ---------------------------------------------------------------------
+export async function verifyAccess(tokenOrDni: string): Promise<{
+  authorized: boolean;
+  autorizado: boolean;
+  member?: Member;
+  motivo?: string;
+  daysRemaining?: number;
+  access_log?: AccessLog;
+}> {
+  return await apiRequest('/verify-access', {
+    method: 'POST',
+    body: JSON.stringify({ qr_token: tokenOrDni }),
+  });
+}
 
-// Access Logs
-export async function logAccess(log: Omit<AccessLog, 'id' | 'timestamp'>): Promise<AccessLog> {
+export async function logAccess(
+  log: Omit<AccessLog, 'id' | 'timestamp'>
+): Promise<AccessLog> {
   const newLog: AccessLog = {
     ...log,
     id: 'acc-' + Date.now().toString(36),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
-  const currentLogs = getAccessLogs();
-  const updatedLogs = [newLog, ...currentLogs.slice(0, 100)];
-  localStorage.setItem(STORAGE_KEY_ACCESS, JSON.stringify(updatedLogs));
-
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      await supabase.from('accesos').insert([{
-        member_id: newLog.member_id,
-        dni: newLog.dni,
-        member_name: newLog.member_name,
-        disciplina: newLog.disciplina,
-        autorizado: newLog.autorizado,
-        motivo: newLog.motivo || ''
-      }]);
-    } catch (e) {
-      console.warn('Could not save access log to Supabase', e);
+  try {
+    const apiLog = await apiRequest<AccessLog>('/access-logs', {
+      method: 'POST',
+      body: JSON.stringify(newLog),
+    });
+    if (apiLog) {
+      const current = getAccessLogs();
+      localStorage.setItem(STORAGE_KEY_ACCESS, JSON.stringify([apiLog, ...current.slice(0, 99)]));
+      return apiLog;
     }
+  } catch (err) {
+    console.warn('Could not post access log to local API, logging locally:', err);
   }
 
+  const current = getAccessLogs();
+  const updated = [newLog, ...current.slice(0, 99)];
+  localStorage.setItem(STORAGE_KEY_ACCESS, JSON.stringify(updated));
   return newLog;
 }
 
@@ -458,82 +355,43 @@ export function getAccessLogs(): AccessLog[] {
 }
 
 export async function fetchAccessLogs(): Promise<AccessLog[]> {
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('accesos')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(100);
-      if (!error && data) {
-        localStorage.setItem(STORAGE_KEY_ACCESS, JSON.stringify(data));
-        return data as AccessLog[];
-      }
-    } catch (e) {
-      console.warn('Could not fetch access logs from Supabase', e);
+  try {
+    const logs = await apiRequest<AccessLog[]>('/access-logs');
+    if (Array.isArray(logs)) {
+      localStorage.setItem(STORAGE_KEY_ACCESS, JSON.stringify(logs));
+      return logs;
     }
+  } catch (err) {
+    console.warn('API fetchAccessLogs failed, falling back to local cache:', err);
   }
+
   return getAccessLogs();
 }
 
+// ---------------------------------------------------------------------
 // Payments
+// ---------------------------------------------------------------------
 export async function logPayment(payment: Omit<PaymentLog, 'id'>): Promise<PaymentLog> {
-  let newPayment: PaymentLog = {
-    ...payment,
-    id: 'pay-' + Date.now().toString(36)
-  };
+  let createdPayment: PaymentLog;
 
-  const stored = getPaymentLogs();
-  const updated = [newPayment, ...stored.filter(p => p.id !== newPayment.id)];
-  localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(updated));
-
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const payload: any = {
-        member_id: newPayment.member_id,
-        fecha: newPayment.fecha,
-        monto: Number(newPayment.monto),
-        metodo: newPayment.metodo,
-        periodo_inicio: newPayment.periodo_inicio,
-        periodo_fin: newPayment.periodo_fin,
-      };
-      if (newPayment.detalles && newPayment.detalles.length > 0) {
-        payload.detalles = newPayment.detalles;
-      }
-      if (newPayment.notas) {
-        payload.notas = newPayment.notas;
-      }
-
-      let { data, error } = await supabase.from('pagos').insert([payload]).select().single();
-
-      if (error && (error.message?.includes('detalles') || error.message?.includes('notas') || error.code === '42703')) {
-        delete payload.detalles;
-        delete payload.notas;
-        const retry = await supabase.from('pagos').insert([payload]).select().single();
-        data = retry.data;
-        error = retry.error;
-      }
-
-      if (error) {
-        console.error('Could not save payment to Supabase:', error);
-      } else if (data) {
-        newPayment = data as PaymentLog;
-        const currentStored = getPaymentLogs();
-        const replaced = currentStored.map(p =>
-          (p.id.startsWith('pay-') && p.member_id === data.member_id && p.fecha === data.fecha)
-            ? (data as PaymentLog)
-            : p
-        );
-        localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(replaced));
-      }
-    } catch (e) {
-      console.warn('Could not save payment to Supabase', e);
-    }
+  try {
+    createdPayment = await apiRequest<PaymentLog>('/payments', {
+      method: 'POST',
+      body: JSON.stringify(payment),
+    });
+  } catch (err) {
+    console.warn('Could not post payment to local API, saving locally:', err);
+    createdPayment = {
+      ...payment,
+      id: 'pay-' + Date.now().toString(36),
+    };
   }
 
-  return newPayment;
+  const stored = getPaymentLogs();
+  const updated = [createdPayment, ...stored.filter((p) => p.id !== createdPayment.id)];
+  localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(updated));
+
+  return createdPayment;
 }
 
 export function getPaymentLogs(): PaymentLog[] {
@@ -547,25 +405,15 @@ export function getPaymentLogs(): PaymentLog[] {
 }
 
 export async function fetchPaymentLogs(): Promise<PaymentLog[]> {
-  const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('pagos')
-        .select('*')
-        .order('creado_en', { ascending: false })
-        .limit(100);
-      if (!error && data) {
-        const localOnly = getPaymentLogs().filter(
-          p => p.id.startsWith('pay-') && !data.some(d => d.member_id === p.member_id && d.fecha === p.fecha)
-        );
-        const combined = [...data, ...localOnly];
-        localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(combined));
-        return combined as PaymentLog[];
-      }
-    } catch (e) {
-      console.warn('Could not fetch payment logs from Supabase', e);
+  try {
+    const logs = await apiRequest<PaymentLog[]>('/payments');
+    if (Array.isArray(logs)) {
+      localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(logs));
+      return logs;
     }
+  } catch (err) {
+    console.warn('API fetchPaymentLogs failed, falling back to local cache:', err);
   }
+
   return getPaymentLogs();
 }

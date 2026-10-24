@@ -6,3 +6,13 @@ coverage/
 *.log
 .env*
 !.env.example
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+server/*.db*
+server/data/*.db*
+server/certs/*.pem
+server/certs/
+*.pem
+

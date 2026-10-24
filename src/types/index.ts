@@ -69,6 +69,12 @@ export interface PaymentLog {
 
 export type UserRole = 'admin' | 'user';
 
+export interface User {
+  id: string;
+  email?: string;
+  role?: UserRole;
+}
+
 export interface CurrentUser {
   role: UserRole;
   member?: Member;

@@ -3,11 +3,13 @@ import QRCode from 'qrcode';
 import { toJpeg } from 'html-to-image';
 import { Member } from '../types';
 import { getCalculatedStatus, formatDisplayDate } from '../lib/dateUtils';
+import logoImg from '../assets/logo.jpg';
 import {
   Download,
   Share2,
   Calendar,
   Phone,
+  MapPin,
   Dumbbell,
   Check,
   AlertCircle,
@@ -24,13 +26,13 @@ interface VirtualCardProps {
 
 export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showActions = true }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [loadingAction, setLoadingAction] = useState<'download' | 'share' | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const statusInfo = getCalculatedStatus(member.fecha_vencimiento, member.estado_pago);
 
   useEffect(() => {
     QRCode.toDataURL(member.codigo_qr, {
-      width: 320,
+      width: 480,
       margin: 1,
       color: {
         dark: '#000000',
@@ -41,69 +43,117 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
       .catch((err) => console.error('Error generating QR:', err));
   }, [member.codigo_qr]);
 
-  const handleDownload = async () => {
-    if (!cardRef.current || isDownloading) return;
+  const getCarnetFileName = (): string => {
+    const rawName = `${member.nombre || ''} ${member.apellido || ''}`.trim();
+    const slug = rawName
+      ? rawName
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+      : 'socio';
+    return `carnet-${slug || 'socio'}.jpg`;
+  };
 
-    setIsDownloading(true);
+  const generateJpg = async (): Promise<{ dataUrl: string; blob: Blob; fileName: string } | null> => {
+    if (!cardRef.current) return null;
+
+    const exportOptions = {
+      quality: 0.95,
+      pixelRatio: 3,
+      backgroundColor: '#0a0a0a',
+      cacheBust: true,
+      filter: (node: Node) => {
+        if (node instanceof Element && node.getAttribute('data-export-hide') === 'true') {
+          return false;
+        }
+        return true;
+      },
+    };
+
+    let dataUrl: string;
     try {
-      const exportOptions = {
-        quality: 0.95,
-        pixelRatio: 2,
-        backgroundColor: '#0a0a0a',
-        cacheBust: true,
-        filter: (node: Node) => {
-          if (node instanceof Element && node.getAttribute('data-export-hide') === 'true') {
-            return false;
-          }
-          return true;
-        },
-      };
+      dataUrl = await toJpeg(cardRef.current, exportOptions);
+    } catch (err) {
+      console.warn('Reintentando captura con skipFonts:', err);
+      dataUrl = await toJpeg(cardRef.current, {
+        ...exportOptions,
+        skipFonts: true,
+      });
+    }
 
-      let dataUrl: string;
-      try {
-        dataUrl = await toJpeg(cardRef.current, exportOptions);
-      } catch (err) {
-        console.warn('Reintentando captura con skipFonts:', err);
-        dataUrl = await toJpeg(cardRef.current, {
-          ...exportOptions,
-          skipFonts: true,
-        });
-      }
+    const fileName = getCarnetFileName();
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
 
-      const cleanLastName = (member.apellido || 'Socio')
-        .trim()
-        .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_');
-      const cleanDni = (member.dni || member.id.slice(0, 8)).trim();
-      const fileName = `Carnet_${cleanLastName}_${cleanDni}.jpg`;
+    return { dataUrl, blob, fileName };
+  };
 
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const triggerDownload = (dataUrl: string, fileName: string) => {
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownload = async () => {
+    if (!cardRef.current || loadingAction) return;
+
+    setLoadingAction('download');
+    try {
+      const result = await generateJpg();
+      if (!result) return;
+      triggerDownload(result.dataUrl, result.fileName);
     } catch (error) {
       console.error('Error al generar el carnet en JPG:', error);
       alert('Hubo un inconveniente al generar la imagen del carnet. Por favor intentá nuevamente.');
     } finally {
-      setIsDownloading(false);
+      setLoadingAction(null);
     }
   };
 
   const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Carnet Ringo - ${member.nombre} ${member.apellido}`,
-          text: `Carnet Ringo Gym | Socio: ${member.nombre} ${member.apellido} | DNI: ${member.dni} | Disciplina: ${member.disciplina}`,
-          url: window.location.href,
-        });
-      } catch (e) {
-        console.debug('Share dismissed');
+    if (!cardRef.current || loadingAction) return;
+
+    setLoadingAction('share');
+    try {
+      const result = await generateJpg();
+      if (!result) return;
+
+      const file = new File([result.blob], result.fileName, { type: 'image/jpeg' });
+      const memberFullName = `${member.nombre || ''} ${member.apellido || ''}`.trim() || 'Socio';
+
+      const canShareFiles =
+        typeof navigator !== 'undefined' &&
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [file] });
+
+      if (canShareFiles) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Carnet Ringo - ${memberFullName}`,
+            text: `Carnet digital Ringo Gym: ${memberFullName}`,
+          });
+        } catch (shareErr: unknown) {
+          if (shareErr instanceof Error && shareErr.name === 'AbortError') {
+            return;
+          }
+          console.warn('Fallo navigator.share, ejecutando fallback de descarga:', shareErr);
+          triggerDownload(result.dataUrl, result.fileName);
+        }
+      } else {
+        triggerDownload(result.dataUrl, result.fileName);
       }
-    } else {
-      navigator.clipboard.writeText(`Ringo Carnet: ${member.nombre} ${member.apellido} (DNI: ${member.dni})`);
-      alert('Información del carnet copiada al portapapeles');
+    } catch (error) {
+      console.error('Error al compartir el carnet:', error);
+      alert('Hubo un inconveniente al procesar el carnet. Por favor intentá nuevamente.');
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -119,39 +169,45 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
         className="w-full bg-[#0a0a0a] rounded-2xl p-4 sm:p-5 border border-white/20 shadow-2xl relative overflow-hidden text-white"
       >
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-black text-base">
-              R
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-black text-sm tracking-widest text-white uppercase">RINGO GYM</span>
-                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-300 border border-neutral-700">
-                  PASS
-                </span>
-              </div>
-              <p className="text-[10px] text-neutral-400 tracking-wider uppercase">Socio Digital</p>
-            </div>
-          </div>
-
-          {/* Status Badge - Monochrome */}
-          <div data-export-hide="true" className="flex items-center">
+        <div className="relative border-b border-neutral-800 pb-3 mb-4">
+          {/* Status Badge - Export Hidden */}
+          <div data-export-hide="true" className="absolute top-0 right-0 z-10">
             {statusInfo.membershipStatus === 'activo' ? (
-              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-black border border-white flex items-center gap-1">
+              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-black border border-white flex items-center gap-1 shadow-sm">
                 <Check className="w-3 h-3 stroke-[3]" />
                 AL DÍA
               </span>
             ) : statusInfo.membershipStatus === 'por_vencer' ? (
-              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-neutral-900 text-white border border-neutral-400 flex items-center gap-1">
+              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-neutral-900 text-white border border-neutral-400 flex items-center gap-1 shadow-sm">
                 <AlertCircle className="w-3 h-3" />
                 POR VENCER
               </span>
             ) : (
-              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-black text-neutral-400 border border-neutral-800 line-through">
+              <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-black text-neutral-400 border border-neutral-800 line-through shadow-sm">
                 VENCIDO
               </span>
             )}
+          </div>
+
+          {/* Centered Brand Header */}
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="bg-[#f7f7f7] rounded-xl px-3 py-1.5 shadow-sm inline-flex items-center justify-center">
+              <img
+                src={logoImg}
+                alt="Ringo Gym Logo"
+                className="h-12 sm:h-14 w-auto object-contain"
+              />
+            </div>
+            <div className="mt-2.5 flex flex-col items-center gap-0.5 text-center">
+              <span className="flex items-center gap-1.5 text-xs text-neutral-300 font-mono tracking-wide">
+                <Phone className="w-3 h-3 text-neutral-400" />
+                +543813424213
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-neutral-400 font-medium tracking-wide">
+                <MapPin className="w-3 h-3 text-neutral-400" />
+                Marcos Paz 419
+              </span>
+            </div>
           </div>
         </div>
 
@@ -260,11 +316,12 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
       {showActions && (
         <div className="flex items-center gap-2 mt-3 w-full justify-center no-print">
           <button
+            type="button"
             onClick={handleDownload}
-            disabled={!qrDataUrl || isDownloading}
-            className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            disabled={!qrDataUrl || !!loadingAction}
+            className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
           >
-            {isDownloading ? (
+            {loadingAction === 'download' ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Generando JPG...</span>
@@ -272,7 +329,26 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
             ) : (
               <>
                 <Download className="w-3.5 h-3.5" />
-                <span>Descargar Carnet (JPG)</span>
+                <span>Descargar JPG</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={!qrDataUrl || !!loadingAction}
+            className="flex-1 py-2.5 px-3 bg-white hover:bg-neutral-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-black text-xs font-bold rounded-xl border border-white transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            {loadingAction === 'share' ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                <span>Compartiendo...</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-black" />
+                <span>Compartir</span>
               </>
             )}
           </button>

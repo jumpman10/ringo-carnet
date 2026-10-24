@@ -1,7 +1,7 @@
 import React from 'react';
 import { Member } from '../types';
 import { VirtualCard } from './VirtualCard';
-import { X, Printer } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface VirtualCardModalProps {
   isOpen: boolean;
@@ -24,15 +24,9 @@ export const VirtualCardModal: React.FC<VirtualCardModalProps> = ({ isOpen, onCl
             </div>
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => window.print()}
-                title="Imprimir carnet"
-                className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors"
-              >
-                <Printer className="w-4 h-4" />
-              </button>
-              <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-900 transition-colors"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-900 transition-colors cursor-pointer"
+                title="Cerrar modal"
               >
                 <X className="w-5 h-5" />
               </button>
