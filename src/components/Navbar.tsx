@@ -1,17 +1,20 @@
 import React from 'react';
 import {
   Settings,
-  QrCode
+  QrCode,
+  Wifi
 } from 'lucide-react';
 
 interface NavbarProps {
   onOpenConfigModal: () => void;
   onOpenScanner?: () => void;
+  onOpenNetworkModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenConfigModal,
   onOpenScanner,
+  onOpenNetworkModal,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-black/95 backdrop-blur-md border-b border-neutral-800 px-3 sm:px-6 py-2.5 sm:py-3 transition-colors">
@@ -41,6 +44,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Botón Conectar Celular / Backup */}
+          {onOpenNetworkModal && (
+            <button
+              onClick={onOpenNetworkModal}
+              className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white rounded-lg border border-neutral-700 flex items-center gap-1.5 text-xs font-mono transition-all shadow-sm"
+              title="Conectar celular por Wi-Fi y descargar backup"
+            >
+              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Conectar Celular / Backup</span>
+            </button>
+          )}
+
           {/* Botón Escanear QR */}
           {onOpenScanner && (
             <button
