@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Member, DisciplineItem, PaymentStatus, PaymentMethod, MembershipStatus } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Member,
+  DisciplineItem,
+  PaymentStatus,
+  PaymentMethod,
+  PaymentMethodDetail,
+  MembershipStatus,
+} from '../types';
 import { calculateNextExpiration, formatDateISO } from '../lib/dateUtils';
 import { processCarnetPhoto } from '../lib/imageUtils';
 import { CameraCaptureModal } from './CameraCaptureModal';
@@ -17,6 +24,7 @@ import {
   Trash2,
   Check,
   Lock,
+  Split,
 } from 'lucide-react';
 
 interface MemberModalProps {
@@ -27,12 +35,19 @@ interface MemberModalProps {
   disciplines: DisciplineItem[];
 }
 
-const PAYMENT_METHODS: PaymentMethod[] = [
-  'Efectivo',
-  'Transferencia',
-  'Tarjeta de débito',
-  'Tarjeta de crédito',
-  'Pago con QR',
+type SinglePaymentMethod =
+  | 'Efectivo'
+  | 'Transferencia'
+  | 'Tarjeta de débito'
+  | 'Tarjeta de crédito'
+  | 'Pago con QR';
+
+const PAYMENT_METHODS: { id: SinglePaymentMethod; label: string }[] = [
+  { id: 'Efectivo', label: 'Efectivo' },
+  { id: 'Transferencia', label: 'Transferencia' },
+  { id: 'Tarjeta de débito', label: 'Débito' },
+  { id: 'Tarjeta de crédito', label: 'Crédito' },
+  { id: 'Pago con QR', label: 'Pago QR' },
 ];
 
 export const MemberModal: React.FC<MemberModalProps> = ({
@@ -53,7 +68,13 @@ export const MemberModal: React.FC<MemberModalProps> = ({
   const [montoMensual, setMontoMensual] = useState<number>(28000);
   const [estadoPago, setEstadoPago] = useState<PaymentStatus>('pagado');
   const [saldoPendiente, setSaldoPendiente] = useState<number>(0);
-  const [metodoPago, setMetodoPago] = useState<PaymentMethod>('Efectivo');
+  const [esMixto, setEsMixto] = useState<boolean>(false);
+  const [metodoSimple, setMetodoSimple] = useState<SinglePaymentMethod>('Efectivo');
+  const [montoEfectivo, setMontoEfectivo] = useState<number>(0);
+  const [montoTransferencia, setMontoTransferencia] = useState<number>(0);
+  const [montoDebito, setMontoDebito] = useState<number>(0);
+  const [montoCredito, setMontoCredito] = useState<number>(0);
+  const [montoQr, setMontoQr] = useState<number>(0);
   const [fotoUrl, setFotoUrl] = useState('');
   const [notas, setNotas] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,10 +93,20 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       setDisciplina(member.disciplina);
       setFechaIngreso(member.fecha_ingreso);
       setFechaVencimiento(member.fecha_vencimiento);
-      setMontoMensual(member.monto_mensual || 28000);
-      setEstadoPago(member.estado_pago === 'pendiente' ? 'saldo' : member.estado_pago);
-      setSaldoPendiente(member.saldo_pendiente ? Math.min(member.saldo_pendiente, member.monto_mensual || 28000) : 0);
-      setMetodoPago(member.metodo_pago || 'Efectivo');
+      const fee = member.monto_mensual || 28000;
+      setMontoMensual(fee);
+      const estPago = member.estado_pago === 'pendiente' ? 'saldo' : member.estado_pago;
+      setEstadoPago(estPago);
+      setSaldoPendiente(member.saldo_pendiente ? Math.min(member.saldo_pendiente, fee) : 0);
+      const isMix = Boolean(member.metodo_pago && (member.metodo_pago.startsWith('Mixto') || member.metodo_pago === 'Mixto'));
+      setEsMixto(isMix && estPago === 'pagado');
+      const matchedMethod = PAYMENT_METHODS.find((pm) => pm.id === member.metodo_pago);
+      setMetodoSimple(matchedMethod ? matchedMethod.id : 'Efectivo');
+      setMontoEfectivo(fee);
+      setMontoTransferencia(0);
+      setMontoDebito(0);
+      setMontoCredito(0);
+      setMontoQr(0);
       setFotoUrl(member.foto_url || '');
       setNotas(member.notas || '');
     } else {
@@ -92,11 +123,17 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       setMontoMensual(defaultDisc.precio);
       setEstadoPago('pagado');
       setSaldoPendiente(0);
-      setMetodoPago('Efectivo');
+      setEsMixto(false);
+      setMetodoSimple('Efectivo');
+      setMontoEfectivo(defaultDisc.precio);
+      setMontoTransferencia(0);
+      setMontoDebito(0);
+      setMontoCredito(0);
+      setMontoQr(0);
       setFotoUrl('');
       setNotas('');
     }
-  }, [member, isOpen]);
+  }, [member, isOpen, disciplines]);
 
   const handleIngresoChange = (val: string) => {
     setFechaIngreso(val);
@@ -111,6 +148,58 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       if (saldoPendiente > found.precio) {
         setSaldoPendiente(found.precio);
       }
+      if (esMixto) {
+        const mitad = Math.floor(found.precio / 2);
+        setMontoEfectivo(mitad);
+        setMontoTransferencia(found.precio - mitad);
+        setMontoDebito(0);
+        setMontoCredito(0);
+        setMontoQr(0);
+      } else {
+        setMontoEfectivo(found.precio);
+      }
+    }
+  };
+
+  const handleToggleMixto = (activarMixto: boolean) => {
+    setEsMixto(activarMixto);
+    if (activarMixto) {
+      const mitad = Math.floor(montoMensual / 2);
+      setMontoEfectivo(mitad);
+      setMontoTransferencia(montoMensual - mitad);
+      setMontoDebito(0);
+      setMontoCredito(0);
+      setMontoQr(0);
+    }
+  };
+
+  const sumaDesglose = useMemo(() => {
+    return (
+      Number(montoEfectivo || 0) +
+      Number(montoTransferencia || 0) +
+      Number(montoDebito || 0) +
+      Number(montoCredito || 0) +
+      Number(montoQr || 0)
+    );
+  }, [montoEfectivo, montoTransferencia, montoDebito, montoCredito, montoQr]);
+
+  const diferenciaDesglose = montoMensual - sumaDesglose;
+  const desgloseValido = !esMixto || diferenciaDesglose === 0;
+
+  const autoCompletarResto = (
+    metodoDestino: SinglePaymentMethod
+  ) => {
+    const restante = montoMensual - sumaDesglose;
+    if (metodoDestino === 'Efectivo') {
+      setMontoEfectivo(Math.max(0, montoEfectivo + restante));
+    } else if (metodoDestino === 'Transferencia') {
+      setMontoTransferencia(Math.max(0, montoTransferencia + restante));
+    } else if (metodoDestino === 'Tarjeta de débito') {
+      setMontoDebito(Math.max(0, montoDebito + restante));
+    } else if (metodoDestino === 'Tarjeta de crédito') {
+      setMontoCredito(Math.max(0, montoCredito + restante));
+    } else if (metodoDestino === 'Pago con QR') {
+      setMontoQr(Math.max(0, montoQr + restante));
     }
   };
 
@@ -149,11 +238,37 @@ export const MemberModal: React.FC<MemberModalProps> = ({
       return;
     }
 
+    if (estadoPago === 'pagado' && esMixto && !desgloseValido) {
+      alert(
+        `La suma del desglose ($${sumaDesglose.toLocaleString('es-AR')}) no coincide con el total a cobrar ($${montoMensual.toLocaleString('es-AR')}).`
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const calculatedVencimiento = fechaVencimiento || calculateNextExpiration(fechaIngreso);
       const isConSaldo = estadoPago === 'saldo' || estadoPago === 'pendiente';
       const estadoMembresia: MembershipStatus = isConSaldo ? 'vencido' : 'activo';
+
+      const detallesList: PaymentMethodDetail[] = [];
+      let metodoFinal: PaymentMethod | string = metodoSimple;
+
+      if (estadoPago === 'pagado' && esMixto) {
+        if (montoEfectivo > 0) detallesList.push({ metodo: 'Efectivo', monto: montoEfectivo });
+        if (montoTransferencia > 0) detallesList.push({ metodo: 'Transferencia', monto: montoTransferencia });
+        if (montoDebito > 0) detallesList.push({ metodo: 'Tarjeta de débito', monto: montoDebito });
+        if (montoCredito > 0) detallesList.push({ metodo: 'Tarjeta de crédito', monto: montoCredito });
+        if (montoQr > 0) detallesList.push({ metodo: 'Pago con QR', monto: montoQr });
+
+        const nombresMetodos = detallesList.map((d) => d.metodo).join(' + ');
+        metodoFinal = detallesList.length > 1 ? `Mixto (${nombresMetodos})` : (detallesList[0]?.metodo || 'Mixto');
+      } else {
+        const montoCobrado = estadoPago === 'pagado' ? montoMensual : Math.max(0, montoMensual - saldoPendiente);
+        if (montoCobrado > 0) {
+          detallesList.push({ metodo: metodoSimple, monto: montoCobrado });
+        }
+      }
 
       await onSave({
         nombre: nombre.trim(),
@@ -169,7 +284,8 @@ export const MemberModal: React.FC<MemberModalProps> = ({
         saldo_pendiente: (estadoPago === 'parcial' || estadoPago === 'saldo')
           ? Number(Math.min(saldoPendiente > 0 ? saldoPendiente : (estadoPago === 'saldo' ? montoMensual : 0), montoMensual))
           : 0,
-        metodo_pago: metodoPago,
+        metodo_pago: metodoFinal,
+        detalles: detallesList.length > 0 ? detallesList : undefined,
         monto_mensual: Number(montoMensual),
         foto_url: fotoUrl.trim(),
         notas: notas.trim(),
@@ -359,35 +475,40 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                 </div>
 
                 {/* Estado de Pago y Método */}
-                <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-900 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-neutral-950 p-3 sm:p-3.5 rounded-xl border border-neutral-900 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-neutral-900">
                     <div>
-                      <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
+                      <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1">
                         Estado de Pago Inicial
                       </label>
                       <div className="flex items-center gap-1.5">
                         <label
-                          className={`flex-1 py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${estadoPago === 'pagado'
-                            ? 'bg-white text-black font-black border-white'
-                            : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                            }`}
+                          className={`py-1.5 px-3 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${
+                            estadoPago === 'pagado'
+                              ? 'bg-white text-black font-black border-white shadow-sm'
+                              : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                          }`}
                         >
                           <input
                             type="radio"
                             name="estadoPago"
                             checked={estadoPago === 'pagado'}
-                            onChange={() => setEstadoPago('pagado')}
+                            onChange={() => {
+                              setEstadoPago('pagado');
+                              setSaldoPendiente(0);
+                            }}
                             className="hidden"
                           />
                           <Check className="w-3 h-3" />
-                          <span className="text-[10px] font-mono uppercase">Pagado</span>
+                          <span className="text-[10px] font-mono uppercase">Pagado Total</span>
                         </label>
 
                         <label
-                          className={`flex-1 py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${estadoPago === 'parcial'
-                            ? 'bg-amber-400 text-black font-black border-amber-300'
-                            : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                            }`}
+                          className={`py-1.5 px-3 rounded-lg border text-center cursor-pointer transition-all flex items-center justify-center gap-1 ${
+                            estadoPago === 'parcial'
+                              ? 'bg-amber-400 text-black font-black border-amber-300 shadow-sm'
+                              : 'bg-black text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                          }`}
                         >
                           <input
                             type="radio"
@@ -395,39 +516,245 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                             checked={estadoPago === 'parcial'}
                             onChange={() => {
                               setEstadoPago('parcial');
+                              setEsMixto(false);
                               if (saldoPendiente > montoMensual) {
                                 setSaldoPendiente(montoMensual);
                               }
                             }}
                             className="hidden"
                           />
-                          <span className="text-[10px] font-mono uppercase">Parcial</span>
+                          <span className="text-[10px] font-mono uppercase">Pago Parcial</span>
                         </label>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1.5">
-                        Método de Pago
-                      </label>
-                      <select
-                        value={metodoPago}
-                        onChange={(e) => setMetodoPago(e.target.value as PaymentMethod)}
-                        disabled={estadoPago === 'saldo' || estadoPago === 'pendiente'}
-                        className="w-full bg-black border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono disabled:opacity-40"
-                      >
-                        {PAYMENT_METHODS.map((method) => (
-                          <option key={method} value={method}>
-                            {method}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {/* Modalidad de Pago: Único vs Mixto (SOLO cuando paga totalmente) */}
+                    {estadoPago === 'pagado' && (
+                      <div className="sm:text-right">
+                        <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono mb-1">
+                          Modalidad
+                        </label>
+                        <div className="inline-flex items-center bg-black p-0.5 rounded-lg border border-neutral-800 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMixto(false)}
+                            className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                              !esMixto
+                                ? 'bg-white text-black shadow-sm'
+                                : 'text-neutral-400 hover:text-white'
+                            }`}
+                          >
+                            Método Único
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMixto(true)}
+                            className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition-all ${
+                              esMixto
+                                ? 'bg-white text-black shadow-sm'
+                                : 'text-neutral-400 hover:text-white'
+                            }`}
+                          >
+                            <Split className="w-3 h-3" />
+                            Combinado / Mixto
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* CASO 1: Método Único (cuando paga total con método único O cuando paga parcial) */}
+                  {(!esMixto || estadoPago !== 'pagado') && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-neutral-400 uppercase font-mono">
+                        {estadoPago === 'parcial' ? 'Método de Pago (Cobro Parcial - Método Único)' : 'Método de Pago'}
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {PAYMENT_METHODS.map((pm) => {
+                          const isSelected = metodoSimple === pm.id;
+                          return (
+                            <button
+                              key={pm.id}
+                              type="button"
+                              onClick={() => setMetodoSimple(pm.id)}
+                              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border text-center ${
+                                isSelected
+                                  ? 'bg-white text-black border-white shadow-sm'
+                                  : 'bg-black text-neutral-400 hover:text-white border-neutral-800 hover:border-neutral-700'
+                              }`}
+                            >
+                              {pm.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CASO 2: Pago Total Combinado / Mixto */}
+                  {estadoPago === 'pagado' && esMixto && (
+                    <div className="bg-black/60 border border-neutral-850 rounded-xl p-3 space-y-2.5">
+                      <div className="text-[11px] text-neutral-400 flex items-center justify-between pb-1 border-b border-neutral-800">
+                        <span>Indica cuánto abona con cada método:</span>
+                        <span className="font-mono text-neutral-300">
+                          Total a cubrir: <strong>${montoMensual.toLocaleString('es-AR')}</strong>
+                        </span>
+                      </div>
+
+                      {/* Efectivo */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-neutral-200 w-28">💵 Efectivo</span>
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={montoEfectivo || ''}
+                            onChange={(e) => setMontoEfectivo(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
+                          />
+                          {diferenciaDesglose !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => autoCompletarResto('Efectivo')}
+                              title="Asignar el saldo restante a Efectivo"
+                              className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
+                            >
+                              Resto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Transferencia */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-neutral-200 w-28">📱 Transferencia</span>
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={montoTransferencia || ''}
+                            onChange={(e) => setMontoTransferencia(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
+                          />
+                          {diferenciaDesglose !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => autoCompletarResto('Transferencia')}
+                              title="Asignar el saldo restante a Transferencia"
+                              className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
+                            >
+                              Resto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tarjeta de Débito */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-neutral-200 w-28">💳 T. Débito</span>
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={montoDebito || ''}
+                            onChange={(e) => setMontoDebito(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
+                          />
+                          {diferenciaDesglose !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => autoCompletarResto('Tarjeta de débito')}
+                              title="Asignar el saldo restante a Débito"
+                              className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
+                            >
+                              Resto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tarjeta de Crédito */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-neutral-200 w-28">💳 T. Crédito</span>
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={montoCredito || ''}
+                            onChange={(e) => setMontoCredito(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
+                          />
+                          {diferenciaDesglose !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => autoCompletarResto('Tarjeta de crédito')}
+                              title="Asignar el saldo restante a Crédito"
+                              className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
+                            >
+                              Resto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Pago con QR */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-neutral-200 w-28">📲 Pago QR</span>
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={montoQr || ''}
+                            onChange={(e) => setMontoQr(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none text-right"
+                          />
+                          {diferenciaDesglose !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => autoCompletarResto('Pago con QR')}
+                              title="Asignar el saldo restante a Pago QR"
+                              className="px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] font-mono whitespace-nowrap"
+                            >
+                              Resto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Balance / Cuadratura de métodos */}
+                      <div
+                        className={`pt-2 border-t border-neutral-800 flex items-center justify-between text-xs ${
+                          desgloseValido ? 'text-green-400' : 'text-amber-400 font-bold'
+                        }`}
+                      >
+                        <span>
+                          {desgloseValido ? '✓ Desglose balanceado:' : '⚠️ Diferencia en desglose:'}
+                        </span>
+                        <span className="font-mono">
+                          Suma: ${sumaDesglose.toLocaleString('es-AR')}{' '}
+                          {diferenciaDesglose !== 0 && (
+                            <span className="text-amber-300">
+                              ({diferenciaDesglose > 0 ? `faltan $${diferenciaDesglose.toLocaleString('es-AR')}` : `sobran $${Math.abs(diferenciaDesglose).toLocaleString('es-AR')}`})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Si es Pago Parcial o Saldo, input para Saldo Pendiente */}
                   {(estadoPago === 'parcial' || estadoPago === 'saldo') && (
-                    <div className="pt-2 border-t border-neutral-850 space-y-1">
+                    <div className="pt-2 border-t border-neutral-850 space-y-1.5">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs text-amber-300 font-bold">
                           {estadoPago === 'saldo' ? 'Saldo adeudado ($):' : 'Saldo pendiente adeudado ($):'}
@@ -449,8 +776,8 @@ export const MemberModal: React.FC<MemberModalProps> = ({
                         </div>
                       </div>
                       <div className="flex justify-between items-center text-[10px] text-neutral-400 font-mono">
-                        <span>Monto base: ${montoMensual.toLocaleString('es-AR')}</span>
-                        <span className="text-amber-400/90 font-semibold">Máx permitido: ${montoMensual.toLocaleString('es-AR')}</span>
+                        <span>Abona hoy ({metodoSimple}): ${Math.max(0, montoMensual - saldoPendiente).toLocaleString('es-AR')}</span>
+                        <span className="text-amber-400/90 font-semibold">Queda debiendo: ${saldoPendiente.toLocaleString('es-AR')}</span>
                       </div>
                     </div>
                   )}

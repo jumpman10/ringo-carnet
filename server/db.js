@@ -38,8 +38,9 @@ function calculateNextExpiration(fromDateStr) {
   const currentMonthIdx = m - 1;
   const day = d;
 
+  // Specific rule: Jan 29, 30, 31 closes on March 1st
   if (currentMonthIdx === 0 && day >= 29) {
-    const nextDate = new Date(y, 1, 1);
+    const nextDate = new Date(y, 2, 1); // March 1st (month index 2)
     return formatDateISO(nextDate);
   }
 
@@ -362,6 +363,7 @@ export const dbService = {
       monto_mensual = 0,
       saldo_pendiente = 0,
       metodo_pago,
+      detalles,
       notas = '',
       codigo_qr,
       id,
@@ -383,10 +385,10 @@ export const dbService = {
     const qrCode = codigo_qr || `RINGO-${cleanDni}-${Date.now().toString(36).toUpperCase()}`;
     const nowIso = new Date().toISOString();
     const isPaid = estado_pago === 'pagado';
-    const lastPaymentDate = isPaid ? fecha_ingreso : null;
-
     const baseMonto = Number(monto_mensual) || 0;
     const finalSaldo = Math.min(Number(saldo_pendiente) || 0, baseMonto > 0 ? baseMonto : Infinity);
+    const hasInitialPayment = isPaid || (estado_pago === 'parcial' && (baseMonto - finalSaldo) > 0);
+    const lastPaymentDate = hasInitialPayment ? fecha_ingreso : null;
 
     const newMember = {
       id: memberId,
@@ -421,10 +423,26 @@ export const dbService = {
         metodo: metodo_pago || 'Efectivo',
         periodo_inicio: fecha_ingreso,
         periodo_fin: calculatedVencimiento,
-        detalles: null,
-        notas: 'Alta inicial de miembro',
+        detalles: detalles || null,
+        notas: notas || 'Alta inicial de miembro',
         creado_en: nowIso,
       });
+    } else if (estado_pago === 'parcial') {
+      const abonado = Math.max(0, baseMonto - finalSaldo);
+      if (abonado > 0) {
+        data.payments.push({
+          id: 'pay-' + Date.now().toString(36),
+          member_id: memberId,
+          fecha: fecha_ingreso,
+          monto: abonado,
+          metodo: metodo_pago || 'Efectivo',
+          periodo_inicio: fecha_ingreso,
+          periodo_fin: calculatedVencimiento,
+          detalles: detalles || null,
+          notas: notas || `Pago parcial inicial (Saldo pendiente: $${finalSaldo})`,
+          creado_en: nowIso,
+        });
+      }
     }
 
     writeData(data);
@@ -499,7 +517,7 @@ export const dbService = {
         metodo: merged.metodo_pago || 'Efectivo',
         periodo_inicio: today,
         periodo_fin: merged.fecha_vencimiento,
-        detalles: null,
+        detalles: updates.detalles || null,
         notas: 'Actualización de estado a pagado',
         creado_en: new Date().toISOString(),
       });

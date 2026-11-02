@@ -37,7 +37,7 @@ export interface Member {
   estado_pago: PaymentStatus;
   monto_mensual: number;
   saldo_pendiente?: number;
-  metodo_pago?: PaymentMethod;
+  metodo_pago?: PaymentMethod | string;
   ultimo_pago_fecha?: string;
   creado_en: string;
   notas?: string;

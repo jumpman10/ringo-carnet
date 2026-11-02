@@ -13,7 +13,7 @@ export function formatDateISO(date: Date): string {
 /**
  * Calculate the next monthly expiration date based on gym rules:
  * - If joining on the 15th of the month, expires on the 15th of next month.
- * - Special user requirement: "En el caso de ingresar del 29 al 31 de enero debería renovar el 1 de febrero."
+ * - Special user requirement: Jan 29, 30, and 31 expire on March 1st (February does not have 30/31, and even on leap years 29 expires on March 1st).
  * - For other months where the day does not exist in next month (e.g. 31 to 30), it rolls to 1st of the next month.
  */
 export function calculateNextExpiration(fromDateStr: string): string {
@@ -24,9 +24,9 @@ export function calculateNextExpiration(fromDateStr: string): string {
   const currentMonthIdx = m - 1; // 0-indexed (0 = Jan, 1 = Feb, ...)
   const day = d;
 
-  // Specific rule: Jan 29, 30, 31 renews on Feb 1st
+  // Specific rule: Jan 29, 30, 31 closes on March 1st
   if (currentMonthIdx === 0 && day >= 29) {
-    const nextDate = new Date(y, 1, 1); // Feb 1
+    const nextDate = new Date(y, 2, 1); // March 1st (month index 2)
     return formatDateISO(nextDate);
   }
 

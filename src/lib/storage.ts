@@ -191,6 +191,7 @@ export async function fetchMembers(): Promise<Member[]> {
 export async function createMember(
   memberData: Omit<Member, 'id' | 'codigo_qr' | 'creado_en' | 'fecha_vencimiento'> & {
     fecha_vencimiento?: string;
+    detalles?: PaymentMethodDetail[];
   }
 ): Promise<Member> {
   let createdMember: Member;
