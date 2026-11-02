@@ -214,30 +214,6 @@ export const NetworkModal: React.FC<NetworkModalProps> = ({ isOpen, onClose }) =
                 </div>
               </>
             ) : null}
-
-            {/* Backup Section */}
-            <div className="pt-2 border-t border-neutral-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <Database className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Copia de Seguridad de la Base de Datos</span>
-                  </h3>
-                  <p className="text-[11px] text-neutral-400 font-mono mt-0.5">
-                    Descargá el archivo completo con socios, cuotas y asistencias
-                  </p>
-                </div>
-              </div>
-
-              <a
-                href="/api/backup"
-                download="gimnasio-backup.db"
-                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs font-mono transition-all shadow-md"
-              >
-                <Download className="w-4 h-4 stroke-[2.5]" />
-                <span>Descargar Copia de Seguridad (.db)</span>
-              </a>
-            </div>
           </div>
         </div>
       </div>

@@ -6,6 +6,15 @@
     background-color: #000000;
     color: #ffffff;
   }
+
+  /* Fix for iOS Safari & WebKit date inputs rendering dark text on dark backgrounds */
+  input[type="date"] {
+    color-scheme: dark;
+  }
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+    min-height: 1.25em;
+  }
 }
 
 /* Custom black & white scrollbars */

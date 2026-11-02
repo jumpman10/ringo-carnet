@@ -2,11 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import QRCode from 'qrcode';
 import { toJpeg } from 'html-to-image';
 import { Member } from '../types';
-import { getCalculatedStatus, formatDisplayDate } from '../lib/dateUtils';
+import { getCalculatedStatus, formatDisplayDate, cleanPhoneNumber } from '../lib/dateUtils';
 import logoImg from '../assets/logo.jpg';
 import {
   Download,
-  Share2,
   Calendar,
   Phone,
   MapPin,
@@ -16,6 +15,7 @@ import {
   QrCode,
   User,
   Loader2,
+  MessageCircle,
 } from 'lucide-react';
 
 interface VirtualCardProps {
@@ -26,12 +26,18 @@ interface VirtualCardProps {
 
 export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showActions = true }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [loadingAction, setLoadingAction] = useState<'download' | 'share' | null>(null);
+  const [loadingAction, setLoadingAction] = useState<'download' | 'whatsapp' | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const statusInfo = getCalculatedStatus(member.fecha_vencimiento, member.estado_pago);
 
+  const qrCodeText =
+    member.codigo_qr ||
+    (member.dni ? `RINGO-${String(member.dni).trim()}` : String(member.id || 'SOCIO'));
+
   useEffect(() => {
-    QRCode.toDataURL(member.codigo_qr, {
+    if (!qrCodeText) return;
+    QRCode.toDataURL(qrCodeText, {
       width: 480,
       margin: 1,
       color: {
@@ -41,17 +47,17 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
     })
       .then((url) => setQrDataUrl(url))
       .catch((err) => console.error('Error generating QR:', err));
-  }, [member.codigo_qr]);
+  }, [qrCodeText]);
 
   const getCarnetFileName = (): string => {
     const rawName = `${member.nombre || ''} ${member.apellido || ''}`.trim();
     const slug = rawName
       ? rawName
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
       : 'socio';
     return `carnet-${slug || 'socio'}.jpg`;
   };
@@ -115,16 +121,18 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
     }
   };
 
-  const handleShare = async () => {
+  const handleWhatsAppShare = async () => {
     if (!cardRef.current || loadingAction) return;
 
-    setLoadingAction('share');
+    setLoadingAction('whatsapp');
+    setFeedbackMessage(null);
     try {
       const result = await generateJpg();
       if (!result) return;
 
       const file = new File([result.blob], result.fileName, { type: 'image/jpeg' });
       const memberFullName = `${member.nombre || ''} ${member.apellido || ''}`.trim() || 'Socio';
+      const shareMessage = `¡Hola ${member.nombre || 'socio'}! Te compartimos tu carnet digital de Ringo Gym 🥊`;
 
       const canShareFiles =
         typeof navigator !== 'undefined' &&
@@ -137,21 +145,72 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
           await navigator.share({
             files: [file],
             title: `Carnet Ringo - ${memberFullName}`,
-            text: `Carnet digital Ringo Gym: ${memberFullName}`,
+            text: shareMessage,
           });
+          return;
         } catch (shareErr: unknown) {
           if (shareErr instanceof Error && shareErr.name === 'AbortError') {
             return;
           }
-          console.warn('Fallo navigator.share, ejecutando fallback de descarga:', shareErr);
-          triggerDownload(result.dataUrl, result.fileName);
+          console.warn('Fallo navigator.share, ejecutando fallback:', shareErr);
         }
-      } else {
-        triggerDownload(result.dataUrl, result.fileName);
       }
+
+      // Fallback para navegadores de escritorio o sin soporte de Web Share con archivos:
+      // 1. Descarga automática del archivo JPG
+      triggerDownload(result.dataUrl, result.fileName);
+
+      // 2. Intentar copiar imagen al portapapeles para pegar directo en WhatsApp Web
+      let copiedToClipboard = false;
+      try {
+        if (typeof window !== 'undefined' && navigator.clipboard && window.ClipboardItem) {
+          const pngBlob = await new Promise<Blob | null>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth || img.width;
+              canvas.height = img.naturalHeight || img.height;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob((blob) => resolve(blob), 'image/png');
+              } else {
+                resolve(null);
+              }
+            };
+            img.onerror = () => resolve(null);
+            img.src = result.dataUrl;
+          });
+
+          if (pngBlob) {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': pngBlob }),
+            ]);
+            copiedToClipboard = true;
+          }
+        }
+      } catch (clipErr) {
+        console.debug('No se pudo copiar al portapapeles (opcional):', clipErr);
+      }
+
+      // 3. Abrir chat de WhatsApp
+      const cleanPhone = cleanPhoneNumber(member.telefono || '');
+      const whatsappUrl = cleanPhone
+        ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(shareMessage)}`
+        : `https://wa.me/?text=${encodeURIComponent(shareMessage)}`;
+
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+
+      // 4. Mensaje de retroalimentación
+      if (copiedToClipboard) {
+        setFeedbackMessage('¡Carnet descargado y copiado! En WhatsApp Web pegalo con Ctrl+V (o Cmd+V).');
+      } else {
+        setFeedbackMessage('Carnet JPG descargado. Se abrió WhatsApp para que lo adjuntes.');
+      }
+      setTimeout(() => setFeedbackMessage(null), 6000);
     } catch (error) {
-      console.error('Error al compartir el carnet:', error);
-      alert('Hubo un inconveniente al procesar el carnet. Por favor intentá nuevamente.');
+      console.error('Error al compartir el carnet por WhatsApp:', error);
+      alert('Hubo un inconveniente al generar el carnet. Por favor intentá nuevamente.');
     } finally {
       setLoadingAction(null);
     }
@@ -254,7 +313,7 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
             </div>
           )}
           <div className="text-[10px] font-mono font-bold text-black tracking-wider text-center mt-1">
-            {member.codigo_qr}
+            {qrCodeText}
           </div>
           <div className="text-[9px] text-neutral-600 uppercase tracking-widest text-center mt-0.5">
             Escanear en portería
@@ -290,10 +349,10 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
           <div className="flex items-center justify-between text-[11px] text-neutral-400 mt-2.5 pt-2 border-t border-neutral-900">
             <div className="flex items-center gap-1">
               <Calendar className="w-3 h-3 text-neutral-500" />
-              <span>Alta: {formatDisplayDate(member.fecha_ingreso)}</span>
+              <span>Alta: {formatDisplayDate(member.fecha_ingreso || (member as any).fecha_inicio || (member as any).start_date || '')}</span>
             </div>
             <div className="flex items-center gap-1 font-semibold text-white">
-              <span>Vence: {formatDisplayDate(member.fecha_vencimiento)}</span>
+              <span>Vence: {formatDisplayDate(member.fecha_vencimiento || (member as any).end_date || '')}</span>
             </div>
           </div>
         </div>
@@ -301,57 +360,68 @@ export const VirtualCard: React.FC<VirtualCardProps> = ({ member, onClose, showA
         {/* Card Footer Info */}
         <div className="flex items-center justify-between text-[10px] text-neutral-500 pt-1 border-t border-neutral-900">
           <span className="flex items-center gap-1 font-mono">
-            <Phone className="w-3 h-3" /> {member.telefono}
+            <Phone className="w-3 h-3" /> {member.telefono || '-'}
           </span>
           {member.fecha_nacimiento && (
             <span className="font-mono text-[9px] text-neutral-500">
               Nac: {formatDisplayDate(member.fecha_nacimiento)}
             </span>
           )}
-          <span className="font-mono text-[9px] uppercase">ID: {member.id.slice(0, 8)}</span>
+          <span className="font-mono text-[9px] uppercase">ID: {member.id ? String(member.id).slice(0, 8) : 'SOCIO'}</span>
         </div>
       </div>
 
       {/* Action Buttons - Mobile friendly */}
       {showActions && (
-        <div className="flex items-center gap-2 mt-3 w-full justify-center no-print">
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={!qrDataUrl || !!loadingAction}
-            className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            {loadingAction === 'download' ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Generando JPG...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-3.5 h-3.5" />
-                <span>Descargar JPG</span>
-              </>
-            )}
-          </button>
+        <div className="flex flex-col gap-2 mt-3 w-full no-print">
+          <div className="flex items-center gap-2 w-full justify-center">
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!qrDataUrl || !!loadingAction}
+              className="flex-1 py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold rounded-xl border border-neutral-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              title="Descargar carnet como imagen JPG"
+            >
+              {loadingAction === 'download' ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Generando JPG...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Descargar JPG</span>
+                </>
+              )}
+            </button>
 
-          <button
-            type="button"
-            onClick={handleShare}
-            disabled={!qrDataUrl || !!loadingAction}
-            className="flex-1 py-2.5 px-3 bg-white hover:bg-neutral-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-black text-xs font-bold rounded-xl border border-white transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            {loadingAction === 'share' ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
-                <span>Compartiendo...</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="w-3.5 h-3.5 text-black" />
-                <span>Compartir</span>
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={handleWhatsAppShare}
+              disabled={!qrDataUrl || !!loadingAction}
+              className="flex-1 py-2.5 px-3 bg-white hover:bg-neutral-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-black text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              title="Compartir carnet JPG por WhatsApp"
+            >
+              {loadingAction === 'whatsapp' ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Preparando...</span>
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>WhatsApp</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {feedbackMessage && (
+            <div className="w-full bg-neutral-900 border border-neutral-800 text-neutral-300 rounded-xl p-2.5 text-center text-[11px] font-mono flex items-center justify-center gap-2">
+              <Check className="w-3.5 h-3.5 text-white shrink-0 stroke-[2.5]" />
+              <span>{feedbackMessage}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

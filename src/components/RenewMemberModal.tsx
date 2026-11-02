@@ -78,7 +78,7 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
       setFechaRenovacion(today);
 
       const hasDebt = (member.saldo_pendiente || 0) > 0;
-      setModoCobro('renovacion');
+      setModoCobro(hasDebt ? 'saldar_deuda' : 'renovacion');
 
       const currentDisc = member.disciplina || (disciplines[0]?.nombre ?? 'Musculación');
       setDisciplina(currentDisc);
@@ -86,7 +86,9 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
       const matchedDisc = disciplines.find((d) => d.nombre === currentDisc);
       const feeAmount = matchedDisc?.precio || member.monto_mensual || 28000;
       setPrecioDisciplina(feeAmount);
-      setMontoAbonado(feeAmount);
+
+      const initialAmount = hasDebt ? (member.saldo_pendiente || 0) : feeAmount;
+      setMontoAbonado(initialAmount);
 
       // Reset payment mode
       setEsMixto(false);
@@ -95,7 +97,7 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
           ? (member.metodo_pago as SinglePaymentMethod)
           : 'Efectivo'
       );
-      setMontoEfectivo(feeAmount);
+      setMontoEfectivo(initialAmount);
       setMontoTransferencia(0);
       setMontoDebito(0);
       setMontoCredito(0);
@@ -112,6 +114,9 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
 
   // When switching modes (Renovación vs Saldar Deuda)
   const handleModoCobroChange = (nuevoModo: 'renovacion' | 'saldar_deuda') => {
+    if ((member?.saldo_pendiente || 0) > 0 && nuevoModo === 'renovacion') {
+      return;
+    }
     setModoCobro(nuevoModo);
     if (nuevoModo === 'saldar_deuda') {
       const deuda = member?.saldo_pendiente || 0;
@@ -224,6 +229,19 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
       alert('El monto a abonar no puede ser negativo');
       return;
     }
+    if (modoCobro === 'saldar_deuda') {
+      const deuda = member?.saldo_pendiente || 0;
+      if (montoAbonado > deuda) {
+        alert(
+          `El monto a abonar ($${montoAbonado.toLocaleString('es-AR')}) no puede ser mayor al saldo deudor ($${deuda.toLocaleString('es-AR')}).`
+        );
+        return;
+      }
+      if (montoAbonado <= 0) {
+        alert('Por favor ingresa un monto mayor a 0 para saldar la deuda.');
+        return;
+      }
+    }
     if (esMixto && !desgloseValido) {
       alert(`La suma del desglose ($${sumaDesglose.toLocaleString('es-AR')}) no coincide con el total a cobrar ($${montoAbonado.toLocaleString('es-AR')}).`);
       return;
@@ -286,7 +304,7 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
               </div>
               <div>
                 <h3 className="font-black text-base text-white tracking-wide uppercase">
-                  {modoCobro === 'saldar_deuda' ? 'Cobro de Saldo Deudor' : 'Cobro & Renovación'}
+                  {tieneDeudaPrevia || modoCobro === 'saldar_deuda' ? 'Pagar Deuda Pendiente' : 'Cobro & Renovación'}
                 </h3>
                 <p className="text-xs text-neutral-400">
                   {member.nombre} {member.apellido} • DNI <span className="font-mono text-neutral-300">{member.dni}</span>
@@ -305,43 +323,21 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
           {/* Form Body */}
           <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto">
             
-            {/* Si el socio tiene deuda previa, selector de operación */}
+            {/* Si el socio tiene deuda previa, solo permitir pagar deuda */}
             {tieneDeudaPrevia && (
-              <div className="bg-amber-950/40 border border-amber-600/40 rounded-xl p-3 space-y-2">
+              <div className="bg-amber-950/40 border border-amber-600/40 rounded-xl p-3.5 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 text-amber-300 font-bold">
                     <BadgeAlert className="w-4 h-4 shrink-0" />
-                    <span>Socio con saldo deudor pendiente</span>
+                    <span>Socio con deuda pendiente</span>
                   </div>
                   <span className="font-mono font-black text-amber-200 text-sm">
                     ${(member.saldo_pendiente || 0).toLocaleString('es-AR')}
                   </span>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleModoCobroChange('renovacion')}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border text-center ${
-                      modoCobro === 'renovacion'
-                        ? 'bg-white text-black border-white shadow-sm'
-                        : 'bg-black/60 text-neutral-400 border-neutral-800 hover:text-white'
-                    }`}
-                  >
-                    Renovar nuevo mes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleModoCobroChange('saldar_deuda')}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border text-center ${
-                      modoCobro === 'saldar_deuda'
-                        ? 'bg-amber-400 text-black border-amber-300 font-black shadow-sm'
-                        : 'bg-black/60 text-amber-300/80 border-amber-900/50 hover:text-amber-200'
-                    }`}
-                  >
-                    Saldar deuda ($ {member.saldo_pendiente?.toLocaleString('es-AR')})
-                  </button>
-                </div>
+                <p className="text-[11px] text-amber-200/80 font-mono">
+                  Para renovar el período, el socio primero debe saldar su deuda pendiente. Solo está disponible la opción de pagar la deuda.
+                </p>
               </div>
             )}
 
@@ -391,7 +387,8 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
                       required
                       value={fechaRenovacion}
                       onChange={(e) => handleRenovacionChange(e.target.value)}
-                      className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-white focus:outline-none transition-colors"
+                      style={{ colorScheme: 'dark' }}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-white focus:outline-none transition-colors min-h-[38px]"
                     />
                   </div>
 
@@ -409,7 +406,8 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
                         readOnly
                         tabIndex={-1}
                         value={fechaVencimiento}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-300 font-mono cursor-not-allowed select-none focus:outline-none"
+                        style={{ colorScheme: 'dark' }}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-300 font-mono cursor-not-allowed select-none focus:outline-none min-h-[38px]"
                       />
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-neutral-500">
                         <Lock className="w-3.5 h-3.5" />
@@ -457,7 +455,7 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
                 <div>
                   <label className="text-xs font-bold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
                     <DollarSign className="w-4 h-4 text-white" />
-                    Monto a Cobrar Hoy ($)
+                    {modoCobro === 'saldar_deuda' ? 'Monto a Saldar de Deuda ($)' : 'Monto a Cobrar Hoy ($)'}
                   </label>
                   <span className="text-[11px] text-neutral-500 block">
                     {modoCobro === 'renovacion'
@@ -469,11 +467,14 @@ export const RenewMemberModal: React.FC<RenewMemberModalProps> = ({
                   <input
                     type="number"
                     min="0"
+                    max={modoCobro === 'saldar_deuda' ? (member.saldo_pendiente || undefined) : undefined}
                     step="100"
                     required
                     value={montoAbonado}
                     onChange={(e) => {
-                      const val = Number(e.target.value) || 0;
+                      const raw = Number(e.target.value) || 0;
+                      const maxVal = modoCobro === 'saldar_deuda' ? (member.saldo_pendiente || 0) : Infinity;
+                      const val = Math.min(raw, maxVal);
                       setMontoAbonado(val);
                       if (!esMixto) {
                         setMontoEfectivo(val);
