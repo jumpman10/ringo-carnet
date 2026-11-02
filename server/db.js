@@ -78,6 +78,59 @@ function getDaysRemaining(expirationDateStr) {
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
+export function getTargetDecemberYear(referenceDate = new Date()) {
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth(); // 0 = Jan, 11 = Dec
+  return currentMonth === 11 ? currentYear : currentYear - 1;
+}
+
+export function isDateInDecemberOfYear(dateStr, targetYear) {
+  if (!dateStr || !targetYear) return false;
+  const str = String(dateStr).trim();
+  const targetPrefix = `${targetYear}-12`;
+  if (str.startsWith(targetPrefix)) {
+    return true;
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.getFullYear() === Number(targetYear) && d.getMonth() === 11;
+  }
+  return false;
+}
+
+export function shouldKeepMemberInPurge(member, targetYear, payments = []) {
+  if (!member) return false;
+
+  // 1. Ingresó en diciembre como nuevo
+  if (isDateInDecemberOfYear(member.fecha_ingreso, targetYear)) {
+    return true;
+  }
+
+  // 2. Registro de socio creado en diciembre
+  if (isDateInDecemberOfYear(member.creado_en, targetYear)) {
+    return true;
+  }
+
+  // 3. Actividad de pago registrada en diciembre (último pago)
+  if (isDateInDecemberOfYear(member.ultimo_pago_fecha, targetYear)) {
+    return true;
+  }
+
+  // 4. Actividad de pago en diciembre registrada en historial de pagos
+  if (Array.isArray(payments) && payments.length > 0) {
+    const hasPaymentInDec = payments.some(
+      (p) =>
+        p.member_id === member.id &&
+        (isDateInDecemberOfYear(p.fecha, targetYear) || isDateInDecemberOfYear(p.creado_en, targetYear))
+    );
+    if (hasPaymentInDec) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function readData() {
   try {
     if (!fs.existsSync(dbPath)) {
@@ -98,6 +151,42 @@ function readData() {
     if (!Array.isArray(parsed.members)) {
       parsed.members = [];
       mutated = true;
+    } else {
+      parsed.members.forEach((m) => {
+        if (!m.id) {
+          m.id = 'mem-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+          mutated = true;
+        }
+        if (!m.codigo_qr) {
+          const cleanDni = m.dni ? String(m.dni).trim() : String(m.id);
+          m.codigo_qr = `RINGO-${cleanDni}-${String(m.id).toUpperCase()}`;
+          mutated = true;
+        }
+        if (!m.fecha_ingreso && (m.fecha_inicio || m.start_date)) {
+          m.fecha_ingreso = m.fecha_inicio || m.start_date;
+          mutated = true;
+        }
+        if (!m.fecha_vencimiento && (m.end_date || m.fecha_fin)) {
+          m.fecha_vencimiento = m.end_date || m.fecha_fin;
+          mutated = true;
+        }
+        if (!m.estado_membresia) {
+          m.estado_membresia = m.estado || m.status || 'activo';
+          mutated = true;
+        }
+        if (!m.estado_pago) {
+          m.estado_pago = m.estado === 'activo' || m.status === 'active' ? 'pagado' : 'pendiente';
+          mutated = true;
+        }
+        if (m.monto_mensual === undefined && m.precio !== undefined) {
+          m.monto_mensual = Number(m.precio) || 0;
+          mutated = true;
+        }
+        if (!m.creado_en) {
+          m.creado_en = m.created_at || new Date().toISOString();
+          mutated = true;
+        }
+      });
     }
     if (!Array.isArray(parsed.disciplines) || parsed.disciplines.length === 0) {
       parsed.disciplines = DEFAULT_DISCIPLINES;
@@ -296,6 +385,9 @@ export const dbService = {
     const isPaid = estado_pago === 'pagado';
     const lastPaymentDate = isPaid ? fecha_ingreso : null;
 
+    const baseMonto = Number(monto_mensual) || 0;
+    const finalSaldo = Math.min(Number(saldo_pendiente) || 0, baseMonto > 0 ? baseMonto : Infinity);
+
     const newMember = {
       id: memberId,
       dni: cleanDni,
@@ -309,8 +401,8 @@ export const dbService = {
       fecha_vencimiento: calculatedVencimiento,
       estado_membresia,
       estado_pago,
-      monto_mensual: Number(monto_mensual) || 0,
-      saldo_pendiente: Number(saldo_pendiente) || 0,
+      monto_mensual: baseMonto,
+      saldo_pendiente: finalSaldo,
       metodo_pago: metodo_pago || null,
       ultimo_pago_fecha: lastPaymentDate,
       creado_en: nowIso,
@@ -369,6 +461,12 @@ export const dbService = {
         ? today
         : current.ultimo_pago_fecha;
 
+    const baseMonto = updates.monto_mensual !== undefined ? Number(updates.monto_mensual) : (current.monto_mensual || 0);
+    let finalSaldo = updates.saldo_pendiente !== undefined ? Number(updates.saldo_pendiente) : (current.saldo_pendiente || 0);
+    if (baseMonto > 0 && finalSaldo > baseMonto) {
+      finalSaldo = baseMonto;
+    }
+
     const merged = {
       ...current,
       dni: updates.dni !== undefined ? String(updates.dni).trim() : current.dni,
@@ -382,8 +480,8 @@ export const dbService = {
       fecha_vencimiento: fechaVencimiento,
       estado_membresia: updates.estado_membresia !== undefined ? updates.estado_membresia : current.estado_membresia,
       estado_pago: updates.estado_pago !== undefined ? updates.estado_pago : current.estado_pago,
-      monto_mensual: updates.monto_mensual !== undefined ? Number(updates.monto_mensual) : current.monto_mensual,
-      saldo_pendiente: updates.saldo_pendiente !== undefined ? Number(updates.saldo_pendiente) : current.saldo_pendiente,
+      monto_mensual: baseMonto,
+      saldo_pendiente: finalSaldo,
       metodo_pago: updates.metodo_pago !== undefined ? updates.metodo_pago : current.metodo_pago,
       ultimo_pago_fecha: ultimoPagoFecha,
       notas: updates.notas !== undefined ? updates.notas : current.notas,
@@ -426,6 +524,89 @@ export const dbService = {
     return true;
   },
 
+  previewPurgeMembersExceptDecember(year) {
+    const targetYear = Number(year) || getTargetDecemberYear();
+    const data = readData();
+
+    const kept = [];
+    const deleted = [];
+
+    for (const member of data.members) {
+      if (shouldKeepMemberInPurge(member, targetYear, data.payments)) {
+        kept.push(member);
+      } else {
+        deleted.push(member);
+      }
+    }
+
+    return {
+      targetYear,
+      totalCount: data.members.length,
+      keptCount: kept.length,
+      deletedCount: deleted.length,
+      deletedMembers: deleted.map((m) => ({
+        id: m.id,
+        nombre: m.nombre,
+        apellido: m.apellido,
+        dni: m.dni,
+        disciplina: m.disciplina,
+        fecha_ingreso: m.fecha_ingreso,
+        ultimo_pago_fecha: m.ultimo_pago_fecha,
+      })),
+    };
+  },
+
+  purgeMembersExceptDecember(year) {
+    const targetYear = Number(year) || getTargetDecemberYear();
+    const data = readData();
+
+    // 1. Respaldo de seguridad automático previo a la depuración masiva
+    try {
+      const backupDir = path.join(dataDir, 'backups');
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupPath = path.join(
+        backupDir,
+        `gimnasio_pre_purge_${targetYear}_${timestamp}.json`
+      );
+      fs.writeFileSync(backupPath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (backupErr) {
+      console.warn('Advertencia: no se pudo crear el archivo de respaldo previo a la depuración:', backupErr);
+    }
+
+    const kept = [];
+    const deleted = [];
+    const deletedIds = new Set();
+
+    for (const member of data.members) {
+      if (shouldKeepMemberInPurge(member, targetYear, data.payments)) {
+        kept.push(member);
+      } else {
+        deleted.push(member);
+        deletedIds.add(member.id);
+      }
+    }
+
+    // Filtrar socios
+    data.members = kept;
+
+    // Eliminar accesos y cobros vinculados a los socios eliminados para integridad referencial
+    data.access_logs = data.access_logs.filter((a) => !deletedIds.has(a.member_id));
+    data.payments = data.payments.filter((p) => !deletedIds.has(p.member_id));
+
+    writeData(data);
+
+    return {
+      success: true,
+      targetYear,
+      keptCount: kept.length,
+      deletedCount: deleted.length,
+      deletedIds: Array.from(deletedIds),
+    };
+  },
+
   renewMember(id, renewalData) {
     const data = readData();
     const index = data.members.findIndex((m) => m.id === id);
@@ -450,8 +631,17 @@ export const dbService = {
     const renewalDate = fechaRenovacion || today;
     const nowIso = new Date().toISOString();
 
+    if ((member.saldo_pendiente || 0) > 0 && !esPagoSaldo) {
+      throw new Error('El socio tiene una deuda pendiente. Debe registrar el pago de la deuda antes de renovar.');
+    }
+
     if (esPagoSaldo) {
-      const nuevoSaldo = Math.max(0, (member.saldo_pendiente || 0) - (Number(monto) || 0));
+      const deudaActual = member.saldo_pendiente || 0;
+      const montoAbonar = Number(monto) || 0;
+      if (montoAbonar > deudaActual) {
+        throw new Error('El monto a pagar no puede ser mayor a la deuda pendiente.');
+      }
+      const nuevoSaldo = Math.max(0, deudaActual - montoAbonar);
       const nuevoEstadoPago = nuevoSaldo === 0 ? 'pagado' : 'parcial';
 
       member.saldo_pendiente = nuevoSaldo;

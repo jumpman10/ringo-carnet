@@ -2,11 +2,13 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Member, AccessLog, PaymentLog, RenewMemberOptions } from '../types';
 import { getCalculatedStatus, getDaysRemaining, formatDisplayDate, buildWhatsAppLink } from '../lib/dateUtils';
 import { RenewMemberModal } from './RenewMemberModal';
+import { PurgeMembersModal } from './PurgeMembersModal';
 import { MemberAvatar } from './MemberAvatar';
 import { Pagination } from './Pagination';
 import {
   Users,
   UserPlus,
+  UserX,
   QrCode,
   Clock,
   Search,
@@ -22,19 +24,22 @@ import {
   History,
   RefreshCw,
   ArrowUpRight,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Database
 } from 'lucide-react';
 import {
   exportMembersToExcel,
   exportAccessLogsToExcel,
   exportPaymentLogsToExcel
 } from '../lib/excelExport';
+import { downloadDatabaseBackup, purgeNonDecemberMembers } from '../lib/storage';
 
 interface AdminDashboardProps {
   members: Member[];
   accessLogs: AccessLog[];
   paymentLogs: PaymentLog[];
   disciplines?: { id: string; nombre: string; precio: number }[];
+  loadData?: () => Promise<void>;
   onOpenNewMember: () => void;
   onOpenEditMember: (member: Member) => void;
   onDeleteMember: (id: string) => Promise<void>;
@@ -49,6 +54,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   accessLogs,
   paymentLogs,
   disciplines = [],
+  loadData,
   onOpenNewMember,
   onOpenEditMember,
   onDeleteMember,
@@ -62,6 +68,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'activo' | 'por_vencer' | 'vencido'>('all');
   const [disciplineFilter, setDisciplineFilter] = useState<string>('all');
   const [renewingMember, setRenewingMember] = useState<Member | null>(null);
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleConfirmPurge = async (targetYear: number) => {
+    const res = await purgeNonDecemberMembers(targetYear);
+    if (loadData) {
+      await loadData();
+    }
+    return res;
+  };
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    if (loadData) {
+      await loadData();
+    }
+    setTimeout(() => setIsRefreshing(false), 400);
+  };
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (loadData) {
+        loadData();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadData]);
 
   // Statistics
   const totalMembers = members.length;
@@ -257,6 +293,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Primary Action Buttons - Mobile friendly */}
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="w-full sm:w-auto py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-neutral-200 hover:text-white font-mono text-xs sm:text-sm font-bold rounded-lg border border-neutral-700 transition-all flex items-center justify-center gap-2 shadow-sm"
+            title="Actualizar datos"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Actualizar</span>
+          </button>
+          <button
             onClick={onOpenNewMember}
             className="w-full sm:w-auto py-2.5 px-4 bg-white hover:bg-neutral-200 active:scale-95 text-black font-black text-xs sm:text-sm uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2"
           >
@@ -324,7 +370,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
                 {/* Discipline Dropdown */}
                 <select
                   value={disciplineFilter}
@@ -344,6 +390,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <button
                   type="button"
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
+                  className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-neutral-200 hover:text-white text-xs font-mono font-bold rounded-lg border border-neutral-700 flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shadow-sm"
+                  title="Actualizar listado de socios"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span>Actualizar</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => exportMembersToExcel(filteredMembers)}
                   disabled={filteredMembers.length === 0}
                   className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-neutral-200 hover:text-white text-xs font-mono font-bold rounded-lg border border-neutral-700 flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shadow-sm"
@@ -351,6 +408,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Excel</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={downloadDatabaseBackup}
+                  className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-neutral-200 hover:text-white text-xs font-mono font-bold rounded-lg border border-neutral-700 flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shadow-sm"
+                  title="Descargar copia de seguridad de la base de datos"
+                >
+                  <Database className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Crear Respaldo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPurgeModalOpen(true)}
+                  className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 active:scale-95 text-red-300 hover:text-red-100 text-xs font-mono font-bold rounded-lg border border-red-800/60 flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shadow-sm"
+                  title="Pasar usuarios: depura socios que no sean nuevos ni hayan pagado en diciembre"
+                >
+                  <UserX className="w-3.5 h-3.5 text-red-400" />
+                  <span>Pasar Usuarios</span>
                 </button>
               </div>
             </div>
@@ -465,8 +542,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       <button
                         onClick={() => handleRenewClick(member)}
-                        className="py-2 px-3 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white text-xs font-bold rounded-lg border border-neutral-700 flex items-center justify-center gap-1"
-                        title="Renovar membresía"
+                        className={`py-2 px-3 active:scale-95 text-xs font-bold rounded-lg border flex items-center justify-center gap-1 transition-colors ${
+                          (member.saldo_pendiente || 0) > 0
+                            ? 'bg-amber-400 text-black border-amber-300 hover:bg-amber-300'
+                            : 'bg-neutral-900 hover:bg-neutral-800 text-white border-neutral-700'
+                        }`}
+                        title={(member.saldo_pendiente || 0) > 0 ? "Pagar deuda pendiente" : "Renovar membresía"}
                       >
                         <CreditCard className="w-4 h-4" />
                       </button>
@@ -633,8 +714,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                               <button
                                 onClick={() => handleRenewClick(member)}
-                                title="Renovar membresía"
-                                className="p-1.5 rounded-lg bg-white text-black hover:bg-neutral-200 transition-colors"
+                                title={(member.saldo_pendiente || 0) > 0 ? "Pagar deuda pendiente" : "Renovar membresía"}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  (member.saldo_pendiente || 0) > 0
+                                    ? 'bg-amber-400 text-black hover:bg-amber-300'
+                                    : 'bg-white text-black hover:bg-neutral-200'
+                                }`}
                               >
                                 <CreditCard className="w-3.5 h-3.5" />
                               </button>
@@ -901,6 +986,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           await onRenewMember(id, options);
           setRenewingMember(null);
         }}
+      />
+
+      {/* Purge / Pasar Usuarios Modal */}
+      <PurgeMembersModal
+        isOpen={isPurgeModalOpen}
+        onClose={() => setIsPurgeModalOpen(false)}
+        members={members}
+        paymentLogs={paymentLogs}
+        onConfirmPurge={handleConfirmPurge}
       />
     </div>
   );

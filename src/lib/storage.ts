@@ -253,6 +253,120 @@ export async function deleteMember(id: string): Promise<boolean> {
   return true;
 }
 
+export interface PurgeResult {
+  success: boolean;
+  targetYear: number;
+  keptCount: number;
+  deletedCount: number;
+  deletedIds: string[];
+}
+
+export function getTargetDecemberYear(referenceDate: Date = new Date()): number {
+  const currentYear = referenceDate.getFullYear();
+  const currentMonth = referenceDate.getMonth(); // 0 = Jan, 11 = Dec
+  return currentMonth === 11 ? currentYear : currentYear - 1;
+}
+
+export function isDateInDecemberOfYear(dateStr?: string | null, targetYear?: number): boolean {
+  if (!dateStr || !targetYear) return false;
+  const str = String(dateStr).trim();
+  const targetPrefix = `${targetYear}-12`;
+  if (str.startsWith(targetPrefix)) {
+    return true;
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.getFullYear() === Number(targetYear) && d.getMonth() === 11;
+  }
+  return false;
+}
+
+export function shouldKeepMemberInPurge(
+  member: Member,
+  targetYear: number,
+  payments: PaymentLog[] = []
+): boolean {
+  if (!member) return false;
+
+  // 1. Ingresó en diciembre como nuevo
+  if (isDateInDecemberOfYear(member.fecha_ingreso, targetYear)) {
+    return true;
+  }
+
+  // 2. Registro de socio creado en diciembre
+  if (isDateInDecemberOfYear(member.creado_en, targetYear)) {
+    return true;
+  }
+
+  // 3. Tuvo pago en diciembre (último pago registrado)
+  if (isDateInDecemberOfYear(member.ultimo_pago_fecha, targetYear)) {
+    return true;
+  }
+
+  // 4. Tuvo pago en diciembre registrado en historial de pagos
+  if (Array.isArray(payments) && payments.length > 0) {
+    const hasPaymentInDec = payments.some(
+      (p) =>
+        p.member_id === member.id &&
+        (isDateInDecemberOfYear(p.fecha, targetYear) || isDateInDecemberOfYear((p as any).creado_en, targetYear))
+    );
+    if (hasPaymentInDec) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export async function purgeNonDecemberMembers(year?: number): Promise<PurgeResult> {
+  const targetYear = year || getTargetDecemberYear();
+
+  let apiSuccess = false;
+  let apiResult: PurgeResult | null = null;
+
+  try {
+    apiResult = await apiRequest<PurgeResult>('/members/purge-non-december', {
+      method: 'POST',
+      body: JSON.stringify({ year: targetYear }),
+    });
+    apiSuccess = true;
+  } catch (err) {
+    console.warn('API purgeNonDecemberMembers failed or unavailable, falling back to local cache:', err);
+  }
+
+  // Limpieza sincronizada en almacenamiento local
+  const currentMembers = getLocalMembers();
+  const currentPayments = getPaymentLogs();
+  const currentAccess = getAccessLogs();
+
+  const kept = currentMembers.filter((m) =>
+    shouldKeepMemberInPurge(m, targetYear, currentPayments)
+  );
+  const deletedIds = currentMembers
+    .filter((m) => !shouldKeepMemberInPurge(m, targetYear, currentPayments))
+    .map((m) => m.id);
+
+  saveLocalMembers(kept);
+
+  const keptPayments = currentPayments.filter((p) => !deletedIds.includes(p.member_id));
+  localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(keptPayments));
+
+  const keptAccess = currentAccess.filter((a) => !deletedIds.includes(a.member_id));
+  localStorage.setItem(STORAGE_KEY_ACCESS, JSON.stringify(keptAccess));
+
+  if (apiSuccess && apiResult) {
+    return apiResult;
+  }
+
+  return {
+    success: true,
+    targetYear,
+    keptCount: kept.length,
+    deletedCount: deletedIds.length,
+    deletedIds,
+  };
+}
+
 export async function renewMemberMembership(
   memberId: string,
   options?: RenewMemberOptions
@@ -416,4 +530,16 @@ export async function fetchPaymentLogs(): Promise<PaymentLog[]> {
   }
 
   return getPaymentLogs();
+}
+
+/**
+ * Dispara la descarga del respaldo de la base de datos desde /api/backup
+ */
+export function downloadDatabaseBackup(): void {
+  const link = document.createElement('a');
+  link.href = '/api/backup';
+  link.setAttribute('download', '');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }

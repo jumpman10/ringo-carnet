@@ -63,8 +63,10 @@ export function calculateNextExpiration(fromDateStr: string): string {
  * Negative = expired X days ago
  */
 export function getDaysRemaining(expirationDateStr: string): number {
-  if (!expirationDateStr) return 0;
-  const [y, m, d] = expirationDateStr.split('-').map(Number);
+  if (!expirationDateStr || typeof expirationDateStr !== 'string') return 0;
+  const cleanStr = expirationDateStr.includes('T') ? expirationDateStr.split('T')[0] : expirationDateStr;
+  const [y, m, d] = cleanStr.split('-').map(Number);
+  if (!y || !m || !d) return 0;
   const expiration = new Date(y, m - 1, d);
   expiration.setHours(23, 59, 59, 999);
 
@@ -73,7 +75,7 @@ export function getDaysRemaining(expirationDateStr: string): number {
 
   const diffMs = expiration.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  return diffDays;
+  return isNaN(diffDays) ? 0 : diffDays;
 }
 
 /**
@@ -124,9 +126,12 @@ export function getCalculatedStatus(
  * Format date for friendly human display (e.g. "15 de Febrero, 2026")
  */
 export function formatDisplayDate(dateStr: string): string {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  const cleanStr = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const [y, m, d] = cleanStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
   const date = new Date(y, m - 1, d);
+  if (isNaN(date.getTime())) return dateStr;
   return date.toLocaleDateString('es-ES', {
     day: 'numeric',
     month: 'short',
@@ -135,11 +140,23 @@ export function formatDisplayDate(dateStr: string): string {
 }
 
 /**
- * Clean phone number for WhatsApp link
+ * Clean phone number for WhatsApp link.
+ * Handles standard Argentine mobile numbers (+54 9, 54, or local 10 digits).
  */
 export function cleanPhoneNumber(phone: string): string {
-  const cleaned = phone.replace(/\D/g, '');
-  // If it doesn't have country code and starts with standard 9 digits or mobile, can be formatted
+  let cleaned = phone.replace(/\D/g, '');
+  if (!cleaned) return '';
+  if (cleaned.startsWith('0')) {
+    cleaned = cleaned.slice(1);
+  }
+  // Argentine mobile: 10 digits (e.g. 3814123456) -> add country code 549
+  if (cleaned.length === 10) {
+    return `549${cleaned}`;
+  }
+  // Argentine mobile: 12 digits starting with 54 (e.g. 543814123456) -> add 9 mobile prefix
+  if (cleaned.startsWith('54') && cleaned.length === 12 && !cleaned.startsWith('549')) {
+    return `549${cleaned.slice(2)}`;
+  }
   return cleaned;
 }
 

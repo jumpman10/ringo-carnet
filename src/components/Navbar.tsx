@@ -2,8 +2,10 @@ import React from 'react';
 import {
   Settings,
   QrCode,
-  Wifi
+  Wifi,
+  Database
 } from 'lucide-react';
+import { downloadDatabaseBackup } from '../lib/storage';
 
 interface NavbarProps {
   onOpenConfigModal: () => void;
@@ -44,38 +46,48 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Botón Conectar Celular / Backup */}
+          {/* Botón Crear Respaldo (Desktop / Tablet) */}
+          <button
+            onClick={downloadDatabaseBackup}
+            className="hidden sm:flex px-3 py-2 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white rounded-lg border border-neutral-700 items-center gap-1.5 text-xs font-mono transition-all shadow-sm"
+            title="Crear y descargar respaldo de la base de datos"
+          >
+            <Database className="w-3.5 h-3.5 text-amber-400" />
+            <span>Crear Respaldo</span>
+          </button>
+
+          {/* Botón Conectar Celular / Backup (Desktop / Tablet) */}
           {onOpenNetworkModal && (
             <button
               onClick={onOpenNetworkModal}
-              className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white rounded-lg border border-neutral-700 flex items-center gap-1.5 text-xs font-mono transition-all shadow-sm"
+              className="hidden sm:flex px-3 py-2 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white rounded-lg border border-neutral-700 items-center gap-1.5 text-xs font-mono transition-all shadow-sm"
               title="Conectar celular por Wi-Fi y descargar backup"
             >
               <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Conectar Celular / Backup</span>
+              <span>Conectar Celular</span>
             </button>
           )}
 
-          {/* Botón Escanear QR */}
+          {/* Botón Escanear QR (Mobile icon-only / Desktop full) */}
           {onOpenScanner && (
             <button
               onClick={onOpenScanner}
-              className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-white hover:bg-neutral-200 active:scale-95 text-black rounded-lg border border-white flex items-center gap-1.5 text-xs font-mono font-bold transition-all shadow-sm"
+              className="p-2 sm:px-3 sm:py-2 bg-white hover:bg-neutral-200 active:scale-95 text-black rounded-lg border border-white flex items-center justify-center gap-1.5 text-xs font-mono font-bold transition-all shadow-sm"
               title="Escanear código QR de socio"
             >
-              <QrCode className="w-3.5 h-3.5 stroke-[2.5]" />
+              <QrCode className="w-4 h-4 sm:w-3.5 sm:h-3.5 stroke-[2.5]" />
               <span className="hidden sm:inline">Escanear QR</span>
             </button>
           )}
 
-          {/* Botón Configurar */}
+          {/* Botón Configurar (Mobile icon-only / Desktop full) */}
           <button
             onClick={onOpenConfigModal}
-            className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white rounded-lg border border-neutral-700 flex items-center gap-1.5 text-xs font-mono transition-all shadow-sm"
+            className="p-2 sm:px-3 sm:py-2 bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white rounded-lg border border-neutral-700 flex items-center justify-center gap-1.5 text-xs font-mono transition-all shadow-sm"
             title="Configurar disciplinas y cuotas"
           >
-            <Settings className="w-3.5 h-3.5" />
-            <span>Configurar</span>
+            <Settings className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+            <span className="hidden sm:inline">Configurar</span>
           </button>
         </div>
       </div>
