@@ -159,7 +159,11 @@ app.get('/api/backup', (req, res) => {
       return res.status(404).json({ error: 'Base de datos no encontrada' });
     }
 
-    res.download(dbPath, 'gimnasio-backup.json', (err) => {
+    const ext = path.extname(dbPath) || '.json';
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `respaldo-gimnasio-${dateStr}${ext}`;
+
+    res.download(dbPath, filename, (err) => {
       if (err && !res.headersSent) {
         res.status(500).json({ error: 'Error al descargar el backup de la base de datos' });
       }
@@ -234,6 +238,28 @@ app.get('/api/members', (req, res) => {
   try {
     const rows = dbService.getMembers();
     res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Previsualización de depuración de socios de diciembre
+app.get('/api/members/purge-preview', (req, res) => {
+  try {
+    const year = req.query.year ? Number(req.query.year) : undefined;
+    const preview = dbService.previewPurgeMembersExceptDecember(year);
+    res.json(preview);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Depuración definitiva de socios no creados ni pagados en diciembre
+app.post('/api/members/purge-non-december', (req, res) => {
+  try {
+    const year = req.body?.year ? Number(req.body.year) : undefined;
+    const result = dbService.purgeMembersExceptDecember(year);
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

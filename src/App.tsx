@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Member, AccessLog, PaymentLog, DisciplineItem, RenewMemberOptions } from './types';
 import {
   fetchMembers,
@@ -45,7 +45,7 @@ export default function App() {
   }, []);
 
   // Load initial data
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [mems, accs, pays, discs] = await Promise.all([
         fetchMembers(),
@@ -62,7 +62,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -121,6 +121,7 @@ export default function App() {
             accessLogs={accessLogs}
             paymentLogs={paymentLogs}
             disciplines={disciplines}
+            loadData={loadData}
             onOpenNewMember={() => {
               setEditingMember(null);
               setIsMemberModalOpen(true);

@@ -47,10 +47,10 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
     const found = members.find(
       (m) =>
-        m.codigo_qr.toUpperCase() === cleaned.toUpperCase() ||
-        m.dni === cleaned ||
-        cleaned.includes(m.dni) ||
-        m.id === cleaned
+        (m.codigo_qr && m.codigo_qr.toUpperCase() === cleaned.toUpperCase()) ||
+        (m.dni && m.dni === cleaned) ||
+        (m.dni && cleaned.includes(m.dni)) ||
+        (m.id && String(m.id).toLowerCase() === cleaned.toLowerCase())
     );
 
     if (found) {
@@ -226,11 +226,6 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                 <div className="bg-black p-3 rounded-xl border border-neutral-800 space-y-2.5">
                   <div className="flex items-center justify-between text-xs text-neutral-400">
                     <span className="font-mono text-[11px]">Validación Rápida:</span>
-                    <label className="cursor-pointer text-white hover:underline flex items-center gap-1 font-mono text-[11px]">
-                      <Upload className="w-3 h-3" />
-                      Subir foto
-                      <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                    </label>
                   </div>
 
                   <form onSubmit={handleManualSearch} className="flex gap-1.5">
@@ -267,8 +262,8 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                         {/* B&W Authorization Header */}
                         <div
                           className={`rounded-xl p-4 border text-center ${isAuthorized
-                              ? 'bg-white text-black border-white'
-                              : 'bg-black text-white border-neutral-700'
+                            ? 'bg-[#00cc50] text-white border-white'
+                            : 'bg-[#cc0000] text-white border-neutral-700'
                             }`}
                         >
                           <div className="text-2xl font-black uppercase tracking-wider font-mono">
@@ -325,20 +320,6 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
                         {/* Actions */}
                         <div className="space-y-1.5 pt-1">
-                          {!isAuthorized && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                await onRenewMember(matchedMember.id);
-                                handleResetScan();
-                              }}
-                              className="w-full py-2.5 px-4 bg-white hover:bg-neutral-200 active:scale-95 text-black font-black text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2"
-                            >
-                              <CreditCard className="w-4 h-4" />
-                              Cobrar y Renovar Mes Ahora
-                            </button>
-                          )}
-
                           <button
                             type="button"
                             onClick={handleResetScan}
